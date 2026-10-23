@@ -7,12 +7,15 @@ import { Alert, Boot, Button, Field, HouseMark, TextInput } from "@/components/u
 
 export const Route = createFileRoute("/login")({ component: Login });
 
-function authError(err: unknown): string {
-  const message = errMsg(err);
-  if (/too many requests/i.test(message)) return "محاولات كتير في وقت قصير. استنى دقيقة وجرب تاني.";
-  if (/invalid origin/i.test(message)) return "الموقع مش مسموح له يسجّل الدخول من العنوان ده.";
-  if (/invalid email or password|invalid credentials/i.test(message)) return "الإيميل أو كلمة السر غير صحيحة.";
-  if (/user already exists/i.test(message)) return "الإيميل ده متسجل قبل كده. ادخل بدل ما تعمل حساب جديد.";
+function authError(message: string) {
+  if (/too many requests/i.test(message)) {
+    return "محاولات كتير في وقت قصير. استنى دقيقة وجرب تاني.";
+  }
+  if (/invalid origin/i.test(message)) {
+    return "المتصفح رفض الطلب. حدّث الصفحة وجرب تاني.";
+  }
+  if (/invalid email or password/i.test(message)) return "الإيميل أو كلمة السر مش صح.";
+  if (/user already exists/i.test(message)) return "الحساب ده موجود. ادخل بالإيميل وكلمة السر.";
   return message || "تعذر الدخول";
 }
 
@@ -30,6 +33,7 @@ function Login() {
 
   async function onEmail(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -38,13 +42,13 @@ function Login() {
           ? await authClient.signUp.email({ email, password, name, callbackURL: "/" })
           : await authClient.signIn.email({ email, password, callbackURL: "/" });
       if (result.error) {
-        setError(authError(result.error.message));
+        setError(authError(result.error.message ?? "تعذر الدخول"));
         setBusy(false);
         return;
       }
       window.location.href = "/";
     } catch (err) {
-      setError(authError(err));
+      setError(authError(errMsg(err)));
       setBusy(false);
     }
   }
@@ -57,12 +61,12 @@ function Login() {
         أقرب محل، خصم واضح على الإصلاح، وتتبع للطلب لحد ما الجهاز يرجع. بعد الدخول هتسجّل رقم تليفونك وعنوانك.
       </p>
       {authEnabled ? (
-        <form className="mt-8 space-y-3 rounded-xl border border-line bg-bg-elev p-4" onSubmit={(e) => void onEmail(e)}>
+        <form className="mt-8 space-y-3" onSubmit={(e) => void onEmail(e)}>
           <div className="flex gap-2">
-            <Button variant={emailMode === "up" ? "primary" : "ghost"} onClick={() => setEmailMode("up")}>
+            <Button type="button" variant={emailMode === "up" ? "primary" : "ghost"} onClick={() => setEmailMode("up")}>
               حساب جديد
             </Button>
-            <Button variant={emailMode === "in" ? "primary" : "ghost"} onClick={() => setEmailMode("in")}>
+            <Button type="button" variant={emailMode === "in" ? "primary" : "ghost"} onClick={() => setEmailMode("in")}>
               دخول
             </Button>
           </div>

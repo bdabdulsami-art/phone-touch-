@@ -125,22 +125,6 @@ const trustedOrigins: string[] = explicitBaseURL
       ...LOCAL_DEV_ORIGINS,
     ];
 
-/** Broker OAuth (Google/X via auth.grok.me) only on Grok preview hosts. */
-function isGrokHostedOrigin(url: string | undefined): boolean {
-  if (!url) return true;
-  try {
-    const host = new URL(url).hostname;
-    return (
-      host === "grok.me" ||
-      host.endsWith(".grok.me") ||
-      host.endsWith(".grok-sandbox.com") ||
-      host.endsWith(".grok.app")
-    );
-  } catch {
-    return false;
-  }
-}
-
 const databaseUrl = env("DATABASE_URL");
 
 // Static broker OAuth endpoints (skip OIDC discovery on every sign-in / callback).
@@ -166,9 +150,8 @@ export const SESSION_TOKEN_COOKIE = "__Host-grok-auth.session_token";
 
 // Built separately so the `betterAuth({...})` call stays easy to edit without
 // breaking brackets (models often trip on the conditional plugin spread).
-const grokOAuthPlugin =
-  authConfigured && isGrokHostedOrigin(explicitBaseURL)
-    ? genericOAuth({
+const grokOAuthPlugin = authConfigured
+  ? genericOAuth({
       config: GROK_PROVIDERS.map(({ providerId, idp }) => ({
         providerId,
         clientId: grokClientId as string,
@@ -230,17 +213,18 @@ export const auth = betterAuth({
   // Local email/password — toggled only via `./email-password` (not a plugin).
   ...(emailAndPasswordEnabled ? { emailAndPassword: { enabled: true } } : {}),
 
-  // Sign-in/sign-up default to 3 requests / 10s. On Vercel, `x-forwarded-for`
-  // is often a comma-separated chain, which Better Auth refuses to trust, so
-  // every visitor shares one bucket and the site returns
-  // "Too many requests. Please try again later." Prefer the single client IP
-  // headers Vercel overwrites, and keep a per-person retry budget.
+  // Sensitive routes default to 3 requests / 10s. On Vercel that window is
+  // per warm instance, and a missing client IP collapses every visitor into
+  // one bucket — a couple of signup retries then return
+  // "Too many requests. Please try again later." Keep a real limit, just one
+  // a person on a phone can survive.
   rateLimit: {
+    enabled: true,
     window: 60,
     max: 60,
     customRules: {
-      "/sign-in/email": { window: 60, max: 10 },
-      "/sign-up/email": { window: 60, max: 8 },
+      "/sign-in/email": { window: 60, max: 20 },
+      "/sign-up/email": { window: 60, max: 15 },
     },
   },
 
@@ -255,6 +239,9 @@ export const auth = betterAuth({
     useSecureCookies: false,
     defaultCookieAttributes: { secure: true, sameSite: "lax", path: "/" },
     ipAddress: {
+      // Single-value headers first. A multi-value x-forwarded-for is rejected
+      // unless trustedProxies is set, which is what made production sign-up
+      // share one global rate-limit key.
       ipAddressHeaders: ["x-real-ip", "x-vercel-forwarded-for", "x-forwarded-for"],
     },
     cookies: {
