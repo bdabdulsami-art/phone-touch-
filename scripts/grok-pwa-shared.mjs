@@ -160,9 +160,9 @@ export function renderInstallPageHtml(template, { host, url } = {}) {
 export const PWA_NAME = "لمسة - Phone Touch";
 export const PWA_SHORT_NAME = "لمسة";
 export const PWA_DESCRIPTION =
-  "صيانة الموبايل من أقرب محل، مع خصم واضح على الإصلاح وقطع الغيار، وتتبع للطلب لحد ما الجهاز يرجع.";
-export const PWA_THEME_COLOR = "#1f4d3a";
-export const PWA_BACKGROUND_COLOR = "#1f4d3a";
+  "صيانة الموبايل من غير ما تلف: أقرب محل، خصم واضح على الإصلاح، وتتبع للطلب لحد ما جهازك يرجع.";
+export const PWA_THEME_COLOR = "#1F4D3A";
+export const PWA_BACKGROUND_COLOR = "#F3F1EB";
 export const PWA_APPLE_ICON = "/icons/apple-touch-icon.png";
 
 export function renderWebManifest(_hostHeader) {
