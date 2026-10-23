@@ -125,6 +125,22 @@ const trustedOrigins: string[] = explicitBaseURL
       ...LOCAL_DEV_ORIGINS,
     ];
 
+/** Broker OAuth (Google/X via auth.grok.me) only on Grok preview hosts. */
+function isGrokHostedOrigin(url: string | undefined): boolean {
+  if (!url) return true;
+  try {
+    const host = new URL(url).hostname;
+    return (
+      host === "grok.me" ||
+      host.endsWith(".grok.me") ||
+      host.endsWith(".grok-sandbox.com") ||
+      host.endsWith(".grok.app")
+    );
+  } catch {
+    return false;
+  }
+}
+
 const databaseUrl = env("DATABASE_URL");
 
 // Static broker OAuth endpoints (skip OIDC discovery on every sign-in / callback).
@@ -150,8 +166,9 @@ export const SESSION_TOKEN_COOKIE = "__Host-grok-auth.session_token";
 
 // Built separately so the `betterAuth({...})` call stays easy to edit without
 // breaking brackets (models often trip on the conditional plugin spread).
-const grokOAuthPlugin = authConfigured
-  ? genericOAuth({
+const grokOAuthPlugin =
+  authConfigured && isGrokHostedOrigin(explicitBaseURL)
+    ? genericOAuth({
       config: GROK_PROVIDERS.map(({ providerId, idp }) => ({
         providerId,
         clientId: grokClientId as string,
@@ -213,6 +230,20 @@ export const auth = betterAuth({
   // Local email/password — toggled only via `./email-password` (not a plugin).
   ...(emailAndPasswordEnabled ? { emailAndPassword: { enabled: true } } : {}),
 
+  // Sign-in/sign-up default to 3 requests / 10s. On Vercel, `x-forwarded-for`
+  // is often a comma-separated chain, which Better Auth refuses to trust, so
+  // every visitor shares one bucket and the site returns
+  // "Too many requests. Please try again later." Prefer the single client IP
+  // headers Vercel overwrites, and keep a per-person retry budget.
+  rateLimit: {
+    window: 60,
+    max: 60,
+    customRules: {
+      "/sign-in/email": { window: 60, max: 10 },
+      "/sign-up/email": { window: 60, max: 8 },
+    },
+  },
+
   // `__Host-` prefixed cookies: the browser REFUSES any same-named cookie that
   // carries a `Domain` attribute, so a sibling `*.grok.me` app cannot "toss" a
   // `Domain=.grok.me` session cookie onto this app. `__Host-` requires Secure +
@@ -223,6 +254,9 @@ export const auth = betterAuth({
   advanced: {
     useSecureCookies: false,
     defaultCookieAttributes: { secure: true, sameSite: "lax", path: "/" },
+    ipAddress: {
+      ipAddressHeaders: ["x-real-ip", "x-vercel-forwarded-for", "x-forwarded-for"],
+    },
     cookies: {
       session_token: { name: SESSION_TOKEN_COOKIE },
       session_data: { name: "__Host-grok-auth.session_data" },
