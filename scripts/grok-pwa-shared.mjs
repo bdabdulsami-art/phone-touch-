@@ -157,23 +157,70 @@ export function renderInstallPageHtml(template, { host, url } = {}) {
     .replaceAll("{{APP_URL}}", escapeHtml(stripInstallParams(url)));
 }
 
-export function renderWebManifest(hostHeader) {
-  const name = appNameFromHost(hostHeader);
+export const PWA_NAME = "لمسة - Phone Touch";
+export const PWA_SHORT_NAME = "لمسة";
+export const PWA_DESCRIPTION =
+  "صيانة الموبايل من أقرب محل، مع خصم واضح على الإصلاح وقطع الغيار، وتتبع للطلب لحد ما الجهاز يرجع.";
+export const PWA_THEME_COLOR = "#1f4d3a";
+export const PWA_BACKGROUND_COLOR = "#1f4d3a";
+export const PWA_APPLE_ICON = "/icons/apple-touch-icon.png";
+
+export function renderWebManifest(_hostHeader) {
   return JSON.stringify(
     {
-      name,
-      short_name: name,
+      name: PWA_NAME,
+      short_name: PWA_SHORT_NAME,
+      description: PWA_DESCRIPTION,
+      lang: "ar",
+      dir: "rtl",
       id: "/",
       start_url: "/",
       scope: "/",
       display: "standalone",
-      background_color: "#000000",
-      theme_color: "#000000",
+      orientation: "portrait",
+      background_color: PWA_BACKGROUND_COLOR,
+      theme_color: PWA_THEME_COLOR,
       icons: [
         {
-          src: "/__grok/icon-180.png",
-          sizes: "180x180",
+          src: "/icons/icon-192.png",
+          sizes: "192x192",
           type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: "/icons/icon-512.png",
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any",
+        },
+        {
+          src: "/icons/icon-512-maskable.png",
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "maskable",
+        },
+      ],
+      screenshots: [
+        {
+          src: "/pwa/shot-home.png",
+          sizes: "1170x2340",
+          type: "image/png",
+          form_factor: "narrow",
+          label: "أقرب محل صيانة وخصم",
+        },
+        {
+          src: "/pwa/shot-shop.png",
+          sizes: "1170x2340",
+          type: "image/png",
+          form_factor: "narrow",
+          label: "تفاصيل المحل والإكسسوارات",
+        },
+        {
+          src: "/pwa/shot-order.png",
+          sizes: "1170x2340",
+          type: "image/png",
+          form_factor: "narrow",
+          label: "طلب صيانة جديد",
         },
       ],
     },
@@ -187,16 +234,16 @@ export function grokPwaHeadTags(appName = DEFAULT_APP_NAME) {
     // Standalone display comes from the manifest ("display": "standalone");
     // the legacy *-web-app-capable metas it replaces are deliberately absent.
     ["manifest", '<link rel="manifest" href="/__grok/manifest.webmanifest">'],
-    ["apple-touch-icon", '<link rel="apple-touch-icon" href="/__grok/icon-180.png">'],
+    ["apple-touch-icon", `<link rel="apple-touch-icon" href="${PWA_APPLE_ICON}">`],
     [
       "apple-mobile-web-app-title",
-      `<meta name="apple-mobile-web-app-title" content="${escapeHtml(appName)}">`,
+      `<meta name="apple-mobile-web-app-title" content="${escapeHtml(PWA_SHORT_NAME || appName)}">`,
     ],
     [
       "apple-mobile-web-app-status-bar-style",
       '<meta name="apple-mobile-web-app-status-bar-style" content="black">',
     ],
-    ["theme-color", '<meta name="theme-color" content="#000000">'],
+    ["theme-color", `<meta name="theme-color" content="${PWA_THEME_COLOR}">`],
   ];
 }
 
@@ -451,7 +498,7 @@ export function injectGrokPwaHead(html, ctx = {}) {
   const missing = grokPwaHeadTags(appName)
     .filter(([key]) => {
       if (key === "manifest") return !next.includes('href="/__grok/manifest.webmanifest"');
-      if (key === "apple-touch-icon") return !next.includes('href="/__grok/icon-180.png"');
+      if (key === "apple-touch-icon") return !next.includes(`href="${PWA_APPLE_ICON}"`);
       return !next.includes(`name="${key}"`);
     })
     .map(([, tag]) => tag);

@@ -508,11 +508,24 @@ test("escapes host-derived values in the install page", () => {
   assert.equal(html.includes("<script>alert(1)</script>"), false);
 });
 
-test("renders the manifest with the per-app name", () => {
-  const manifest = JSON.parse(renderWebManifest("wild-race.grok.me"));
-  assert.equal(manifest.name, "Wild Race");
-  assert.equal(manifest.short_name, "Wild Race");
-  assert.equal(manifest.icons[0].src, "/__grok/icon-180.png");
+test("renders the Phone Touch manifest for packaging", () => {
+  const manifest = JSON.parse(renderWebManifest("phone-touch.vercel.app"));
+  assert.equal(manifest.name, "لمسة - Phone Touch");
+  assert.equal(manifest.short_name, "لمسة");
+  assert.equal(manifest.lang, "ar");
+  assert.equal(manifest.dir, "rtl");
+  assert.equal(manifest.start_url, "/");
+  assert.equal(manifest.scope, "/");
+  assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.theme_color, "#1f4d3a");
+  assert.equal(manifest.background_color, "#1f4d3a");
+  assert.match(manifest.description, /صيانة الموبايل/);
+  assert.deepEqual(
+    manifest.icons.map((icon) => `${icon.sizes}:${icon.purpose}`),
+    ["192x192:any", "512x512:any", "512x512:maskable"],
+  );
+  assert.ok(manifest.screenshots.length >= 2);
+  assert.equal(manifest.screenshots[0].form_factor, "narrow");
 });
 
 // Tripwires: the deployed-app path only works if Nitro scans server/ — an

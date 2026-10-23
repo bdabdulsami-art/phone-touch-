@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1f4d3a" />
+    <title>لمسة — غير متصل</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f3f1eb;
+        --ink: #1a1916;
+        --muted: #6e6a62;
+        --pine: #1f4d3a;
+        --pine-ink: #f4f7f5;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "IBM Plex Sans Arabic", "Segoe UI", sans-serif;
+      }
+      main { width: min(100%, 420px); text-align: center; }
+      .mark {
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 16px;
+        border-radius: 18px;
+        background: var(--pine);
+        display: grid;
+        place-items: center;
+      }
+      h1 { margin: 0; font-size: 28px; }
+      p { margin: 12px 0 0; color: var(--muted); line-height: 1.6; }
+      button {
+        margin-top: 24px;
+        height: 44px;
+        padding: 0 18px;
+        border: 0;
+        border-radius: 10px;
+        background: var(--pine);
+        color: var(--pine-ink);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="mark" aria-hidden="true">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+          <rect x="10" y="3" width="16" height="30" rx="4" fill="#f3f1eb" />
+          <circle cx="18" cy="27" r="2.2" fill="#1f4d3a" />
+        </svg>
+      </div>
+      <h1>لمسة</h1>
+      <p>أنت غير متصل بالإنترنت. صفحات الصيانة الأساسية متاحة لما النت يرجع، وطلبات الحساب مش بتتخزن على الجهاز.</p>
+      <button type="button" onclick="location.reload()">حاول تاني</button>
+    </main>
+  </body>
+</html>
