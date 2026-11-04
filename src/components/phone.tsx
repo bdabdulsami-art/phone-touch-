@@ -2,9 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useState, type FormE
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ClipboardList, Home, UserRound } from "lucide-react";
 import { RedirectToSignIn } from "@/lib/auth/gates";
+import { signOut } from "@/lib/auth/client";
 import { useCurrentUser, useCurrentUserState } from "@/lib/auth/use-current-user";
 import { createProfile, getProfile } from "@/lib/api";
-import { AREAS, DISCOUNTS, errMsg, type Mode, type Profile } from "@/lib/domain";
+import { AREAS, MERCHANT_BLOCKED, errMsg, type Mode, type Profile } from "@/lib/domain";
 import { Alert, AreaSelect, Boot, Button, Field, HouseMark, TextInput } from "@/components/ui";
 
 type Ctx = {
@@ -69,6 +70,11 @@ export function PhoneProvider({ children }: { children: ReactNode }) {
     };
   }, [isPending, userId]);
 
+  useEffect(() => {
+    if (!profile?.blocked) return;
+    void signOut("/login");
+  }, [profile?.blocked]);
+
   const setMode = (next: Mode) => {
     setModeState(next);
     localStorage.setItem(MODE_KEY, next);
@@ -85,6 +91,12 @@ export function usePhone() {
   const ctx = useContext(PhoneCtx);
   if (!ctx?.profile) throw new Error("profile");
   return { ...ctx, profile: ctx.profile };
+}
+
+export async function leaveIfBlocked(err: unknown) {
+  if (errMsg(err) !== MERCHANT_BLOCKED) return false;
+  await signOut("/login");
+  return true;
 }
 
 export function Gate({ children }: { children: ReactNode }) {
@@ -106,6 +118,7 @@ export function Gate({ children }: { children: ReactNode }) {
     );
   }
   if (!ctx.profile) return <Onboarding />;
+  if (ctx.profile.blocked) return <Boot />;
   return children;
 }
 
@@ -118,7 +131,7 @@ function Onboarding() {
   const [area, setArea] = useState<string>(AREAS[0].name);
   const [address, setAddress] = useState("");
   const [shopName, setShopName] = useState("");
-  const [discount, setDiscount] = useState<number>(15);
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -129,7 +142,10 @@ function Onboarding() {
     setError("");
     try {
       await createProfile({
-        data: { role, name, phone, address, area, shopName, discount },
+        data:
+          role === "technician"
+            ? { role, name, phone, address, area, shopName, discount: 15, inviteCode }
+            : { role, name, phone, address, area, shopName, discount: 15 },
       });
       const next = await ctx.refresh();
       if (next?.shop) ctx.setMode("tech");
@@ -152,7 +168,7 @@ function Onboarding() {
             className="w-full rounded-xl border border-line bg-bg-elev p-4 text-start transition-opacity duration-150 active:opacity-80"
             onClick={() => setRole("client")}
           >
-            <span className="block text-base font-semibold">عايز أصلّح موبايلي</span>
+            <span className="block text-base font-semibold">عميل</span>
             <span className="mt-1 block text-sm text-muted">دور على محل قريب، اطلب صيانة أو إكسسوار، وتابع الطلب.</span>
           </button>
           <button
@@ -160,8 +176,8 @@ function Onboarding() {
             className="w-full rounded-xl border border-line bg-bg-elev p-4 text-start transition-opacity duration-150 active:opacity-80"
             onClick={() => setRole("technician")}
           >
-            <span className="block text-base font-semibold">عندي محل أو بشتغل فني</span>
-            <span className="mt-1 block text-sm text-muted">استقبل الطلبات، حدّد الخصم، واعرض الإكسسوارات.</span>
+            <span className="block text-base font-semibold">محل</span>
+            <span className="mt-1 block text-sm text-muted">سجّل المحل بكود الدعوة. يظهر للعملاء بعد المراجعة.</span>
           </button>
         </div>
       ) : (
@@ -193,17 +209,11 @@ function Onboarding() {
           </Field>
           {role === "technician" ? (
             <>
+              <Field label="كود الدعوة">
+                <TextInput value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} autoComplete="off" required />
+              </Field>
               <Field label="اسم المحل">
                 <TextInput value={shopName} onChange={(e) => setShopName(e.target.value)} required />
-              </Field>
-              <Field label="خصم الصيانة">
-                <AreaSelect value={discount} onChange={(e) => setDiscount(Number(e.target.value))}>
-                  {DISCOUNTS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}%
-                    </option>
-                  ))}
-                </AreaSelect>
               </Field>
             </>
           ) : null}

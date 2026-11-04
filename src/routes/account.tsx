@@ -2,9 +2,9 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { UserButton } from "@/lib/auth/gates";
 import { saveShop, updateProfile } from "@/lib/api";
-import { Gate, Shell, usePhone } from "@/components/phone";
+import { Gate, Shell, leaveIfBlocked, usePhone } from "@/components/phone";
 import { Alert, AreaSelect, Button, Field, TextInput } from "@/components/ui";
-import { AREAS, DISCOUNTS, errMsg } from "@/lib/domain";
+import { AREAS, errMsg, formatMoney } from "@/lib/domain";
 
 export const Route = createFileRoute("/account")({ component: AccountPage });
 
@@ -28,7 +28,7 @@ function AccountBody() {
   const [shopPhone, setShopPhone] = useState(profile.shop?.phone ?? profile.phone);
   const [shopArea, setShopArea] = useState(profile.shop?.area ?? profile.area);
   const [shopAddress, setShopAddress] = useState(profile.shop?.address ?? "");
-  const [discount, setDiscount] = useState(profile.shop?.discount ?? 15);
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,7 +46,10 @@ function AccountBody() {
           void updateProfile({ data: { name, phone, address, area } })
             .then(() => refresh())
             .then(() => setNote("اتحفظت بياناتك"))
-            .catch((err) => setError(errMsg(err)))
+            .catch(async (err) => {
+              if (await leaveIfBlocked(err)) return;
+              setError(errMsg(err));
+            })
             .finally(() => setBusy(false));
         }}
       >
@@ -75,69 +78,125 @@ function AccountBody() {
 
       <section className="space-y-3 rounded-xl border border-line bg-bg-elev p-4">
         <h2 className="font-semibold">{profile.shop ? "بيانات المحل" : "افتح محل"}</h2>
-        <p className="text-sm text-muted">
-          {profile.shop
-            ? "تقدر تبدّل بين واجهة العميل وواجهة المحل من أعلى الشاشة."
-            : "لو عندك محل أو بتشتغل فني، سجّله هنا عشان توصلك الطلبات."}
-        </p>
-        <form
-          className="space-y-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setBusy(true);
-            setError("");
-            setNote("");
-            void saveShop({
-              data: {
-                shopName,
-                phone: shopPhone,
-                address: shopAddress,
-                area: shopArea,
-                discount,
-              },
-            })
-              .then(() => refresh())
-              .then(() => {
-                setMode("tech");
-                setNote("المحل جاهز");
-              })
-              .catch((err) => setError(errMsg(err)))
-              .finally(() => setBusy(false));
-          }}
-        >
-          <Field label="اسم المحل">
-            <TextInput value={shopName} onChange={(e) => setShopName(e.target.value)} />
-          </Field>
-          <Field label="تليفون المحل">
-            <TextInput value={shopPhone} onChange={(e) => setShopPhone(e.target.value)} inputMode="tel" />
-          </Field>
-          <Field label="منطقة المحل">
-            <AreaSelect value={shopArea} onChange={(e) => setShopArea(e.target.value)}>
-              {AREAS.map((item) => (
-                <option key={item.id} value={item.name}>
-                  {item.name}
-                </option>
-              ))}
-            </AreaSelect>
-          </Field>
-          <Field label="عنوان المحل">
-            <TextInput value={shopAddress} onChange={(e) => setShopAddress(e.target.value)} />
-          </Field>
-          {profile.shop ? null : (
-            <Field label="خصم الصيانة">
-              <AreaSelect value={discount} onChange={(e) => setDiscount(Number(e.target.value))}>
-                {DISCOUNTS.map((n) => (
-                  <option key={n} value={n}>
-                    {n}%
-                  </option>
-                ))}
-              </AreaSelect>
-            </Field>
-          )}
-          <Button type="submit" disabled={busy}>
-            {profile.shop ? "تحديث المحل" : "فتح المحل"}
-          </Button>
-        </form>
+        {!profile.shop ? (
+          <>
+            <p className="text-sm text-muted">لو عندك محل، سجّله بكود الدعوة. يظهر للعملاء بعد المراجعة.</p>
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setBusy(true);
+                setError("");
+                setNote("");
+                void saveShop({
+                  data: {
+                    shopName,
+                    phone: shopPhone,
+                    address: shopAddress,
+                    area: shopArea,
+                    discount: 15,
+                    inviteCode,
+                  },
+                })
+                  .then(() => refresh())
+                  .then(() => {
+                    setMode("tech");
+                    setNote("طلبك قيد المراجعة");
+                  })
+                  .catch(async (err) => {
+                    if (await leaveIfBlocked(err)) return;
+                    setError(errMsg(err));
+                  })
+                  .finally(() => setBusy(false));
+              }}
+            >
+              <Field label="كود الدعوة">
+                <TextInput value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} autoComplete="off" />
+              </Field>
+              <Field label="اسم المحل">
+                <TextInput value={shopName} onChange={(e) => setShopName(e.target.value)} />
+              </Field>
+              <Field label="تليفون المحل">
+                <TextInput value={shopPhone} onChange={(e) => setShopPhone(e.target.value)} inputMode="tel" />
+              </Field>
+              <Field label="منطقة المحل">
+                <AreaSelect value={shopArea} onChange={(e) => setShopArea(e.target.value)}>
+                  {AREAS.map((item) => (
+                    <option key={item.id} value={item.name}>
+                      {item.name}
+                    </option>
+                  ))}
+                </AreaSelect>
+              </Field>
+              <Field label="عنوان المحل">
+                <TextInput value={shopAddress} onChange={(e) => setShopAddress(e.target.value)} />
+              </Field>
+              <Button type="submit" disabled={busy}>
+                فتح المحل
+              </Button>
+            </form>
+          </>
+        ) : profile.shop.merchantStatus === "pending" ? (
+          <p className="text-sm font-medium">طلبك قيد المراجعة</p>
+        ) : profile.shop.merchantStatus === "suspended" ? (
+          <div className="space-y-1 text-sm">
+            <p>المحل موقوف. تقدر تشوف المستحقات فقط.</p>
+            <p className="font-medium">
+              {profile.shop.dues == null ? "المستحقات غير متاحة حالياً" : `المستحقات: ${formatMoney(profile.shop.dues)}`}
+            </p>
+          </div>
+        ) : profile.shop.merchantStatus === "active" ? (
+          <>
+            <p className="text-sm text-muted">تقدر تبدّل بين واجهة العميل وواجهة المحل من أعلى الشاشة.</p>
+            <form
+              className="space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setBusy(true);
+                setError("");
+                setNote("");
+                void saveShop({
+                  data: {
+                    shopName,
+                    phone: shopPhone,
+                    address: shopAddress,
+                    area: shopArea,
+                    discount: profile.shop?.discount ?? 15,
+                  },
+                })
+                  .then(() => refresh())
+                  .then(() => setNote("اتحفظت بيانات المحل"))
+                  .catch(async (err) => {
+                    if (await leaveIfBlocked(err)) return;
+                    setError(errMsg(err));
+                  })
+                  .finally(() => setBusy(false));
+              }}
+            >
+              <Field label="اسم المحل">
+                <TextInput value={shopName} onChange={(e) => setShopName(e.target.value)} />
+              </Field>
+              <Field label="تليفون المحل">
+                <TextInput value={shopPhone} onChange={(e) => setShopPhone(e.target.value)} inputMode="tel" />
+              </Field>
+              <Field label="منطقة المحل">
+                <AreaSelect value={shopArea} onChange={(e) => setShopArea(e.target.value)}>
+                  {AREAS.map((item) => (
+                    <option key={item.id} value={item.name}>
+                      {item.name}
+                    </option>
+                  ))}
+                </AreaSelect>
+              </Field>
+              <Field label="عنوان المحل">
+                <TextInput value={shopAddress} onChange={(e) => setShopAddress(e.target.value)} />
+              </Field>
+              <Button type="submit" disabled={busy}>
+                تحديث المحل
+              </Button>
+            </form>
+          </>
+        ) : null}
       </section>
       {note ? <p className="text-sm text-pine">{note}</p> : null}
       <Alert>{error}</Alert>

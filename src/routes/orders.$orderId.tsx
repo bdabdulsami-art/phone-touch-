@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Check, ChevronRight } from "lucide-react";
 import { addReview, advanceOrder, getOrder } from "@/lib/api";
-import { Gate, Shell, usePhone } from "@/components/phone";
+import { Gate, Shell, leaveIfBlocked, usePhone } from "@/components/phone";
 import { Alert, Button, Stars, TextArea } from "@/components/ui";
 import {
   STATUS_LABEL,
@@ -47,8 +47,10 @@ function TrackBody() {
       .then((next) => {
         if (!cancel) setOrder(next);
       })
-      .catch((e) => {
-        if (!cancel) setError(errMsg(e));
+      .catch(async (e) => {
+        if (cancel) return;
+        if (await leaveIfBlocked(e)) return;
+        setError(errMsg(e));
       });
     return () => {
       cancel = true;
@@ -63,6 +65,7 @@ function TrackBody() {
       await advanceOrder({ data: { orderId: order.id, next } });
       await load();
     } catch (e) {
+      if (await leaveIfBlocked(e)) return;
       setError(errMsg(e));
     } finally {
       setBusy(false);
@@ -76,7 +79,8 @@ function TrackBody() {
   const steps = flowOf(order.serviceType);
   const current = steps.indexOf(order.status);
   const moves = techMoves(order.serviceType, order.status);
-  const canDrive = order.ownedShop || (order.isDemo && !order.ownedShop);
+  const shopOpen = !order.ownedShop || profile.shop?.merchantStatus === "active";
+  const canDrive = (order.ownedShop && shopOpen) || (order.isDemo && !order.ownedShop);
   const isClient = !order.ownedShop || profile.shop?.id !== order.shopId;
 
   return (

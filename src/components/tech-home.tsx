@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { addProduct, advanceOrder, deleteProduct, getTechBoard, setDiscount } from "@/lib/api";
-import { usePhone } from "@/components/phone";
+import { usePhone, leaveIfBlocked } from "@/components/phone";
 import { Alert, Button, Discount, Field, TextInput } from "@/components/ui";
 import { fileToJpeg } from "@/lib/image";
 import {
@@ -19,6 +19,7 @@ import {
 export function TechHome() {
   const { profile, refresh } = usePhone();
   const shop = profile.shop;
+  const open = shop?.merchantStatus === "active";
   const [tab, setTab] = useState<"orders" | "discount" | "products">("orders");
   const [orders, setOrders] = useState<OrderView[] | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -32,6 +33,7 @@ export function TechHome() {
   }
 
   useEffect(() => {
+    if (!open) return;
     let cancel = false;
     getTechBoard()
       .then((data) => {
@@ -39,15 +41,37 @@ export function TechHome() {
         setOrders(data.orders);
         setProducts(data.products);
       })
-      .catch((e) => {
-        if (!cancel) setError(errMsg(e));
+      .catch(async (e) => {
+        if (cancel) return;
+        if (await leaveIfBlocked(e)) return;
+        setError(errMsg(e));
       });
     return () => {
       cancel = true;
     };
-  }, []);
+  }, [open]);
 
   if (!shop) return null;
+  if (shop.merchantStatus === "pending") {
+    return (
+      <div className="rise space-y-2">
+        <h1 className="text-2xl font-semibold">{shop.shopName}</h1>
+        <p className="text-sm font-medium">طلبك قيد المراجعة</p>
+      </div>
+    );
+  }
+  if (shop.merchantStatus === "suspended") {
+    return (
+      <div className="rise space-y-2">
+        <h1 className="text-2xl font-semibold">{shop.shopName}</h1>
+        <p className="text-sm">المحل موقوف. تقدر تشوف المستحقات فقط.</p>
+        <p className="text-sm font-medium">
+          {shop.dues == null ? "المستحقات غير متاحة حالياً" : `المستحقات: ${formatMoney(shop.dues)}`}
+        </p>
+      </div>
+    );
+  }
+  if (shop.merchantStatus !== "active") return null;
 
   return (
     <div className="rise space-y-5">
@@ -88,6 +112,7 @@ export function TechHome() {
               await advanceOrder({ data: { orderId, next } });
               await load();
             } catch (e) {
+              if (await leaveIfBlocked(e)) return;
               setError(errMsg(e));
             } finally {
               setBusy(false);
@@ -106,6 +131,7 @@ export function TechHome() {
               await setDiscount({ data: value });
               await refresh();
             } catch (e) {
+              if (await leaveIfBlocked(e)) return;
               setError(errMsg(e));
             } finally {
               setBusy(false);
@@ -124,6 +150,7 @@ export function TechHome() {
               await fn();
               await load();
             } catch (e) {
+              if (await leaveIfBlocked(e)) return;
               setError(errMsg(e));
             } finally {
               setBusy(false);

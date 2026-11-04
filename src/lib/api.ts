@@ -4,10 +4,14 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import {
   DELIVERY_FEE,
   DISCOUNTS,
+  MERCHANT_BLOCKED,
   areaByName,
   isSafeImage,
+  merchantBlocksSession,
+  merchantStatusOf,
   num,
   techMoves,
+  type MerchantStatus,
   type OrderKind,
   type OrderView,
   type Product,
@@ -16,6 +20,7 @@ import {
   type ServiceType,
   type Shop,
 } from "@/lib/domain";
+import type { Sql } from "@/lib/db";
 
 function text(v: unknown, max: number) {
   if (typeof v !== "string") return "";
@@ -40,6 +45,109 @@ function areaOf(v: unknown) {
   const area = areaByName(text(v, 40));
   if (!area) throw new Error("اختار منطقة من القائمة");
   return area;
+}
+
+function inviteOf(v: unknown) {
+  const code = text(v, 64);
+  if (code.length < 4) throw new Error("اكتب كود الدعوة");
+  return code;
+}
+
+type OwnerGate = { id: number; status: MerchantStatus; dues: number | null };
+
+async function ownerGate(sql: Sql, userId: string): Promise<OwnerGate | null> {
+  const rows = await sql<{
+    id: number;
+    merchant_email: string | null;
+    merchant_status: string;
+    is_demo: boolean;
+  }>`
+    select id, merchant_email, merchant_status, is_demo
+    from shops where owner_user_id = ${userId}
+  `;
+  const shop = rows[0];
+  if (!shop) return null;
+  if (shop.is_demo || !shop.merchant_email) {
+    return { id: num(shop.id), status: merchantStatusOf(shop.merchant_status), dues: null };
+  }
+  try {
+    const { readMerchantStatus } = await import("@/lib/merchant.server");
+    const snap = await readMerchantStatus(shop.merchant_email);
+    if (snap.status !== shop.merchant_status) {
+      await sql`update shops set merchant_status = ${snap.status} where id = ${shop.id}`;
+    }
+    return { id: num(shop.id), status: snap.status, dues: snap.dues };
+  } catch {
+    return { id: num(shop.id), status: merchantStatusOf(shop.merchant_status), dues: null };
+  }
+}
+
+function assertShopOpen(gate: OwnerGate | null) {
+  if (!gate) throw new Error("افتح المحل الأول");
+  if (merchantBlocksSession(gate.status)) throw new Error(MERCHANT_BLOCKED);
+  if (gate.status === "pending") throw new Error("طلبك قيد المراجعة");
+  if (gate.status !== "active") throw new Error("المحل موقوف. تقدر تشوف المستحقات فقط.");
+}
+
+async function syncPublicMerchants(sql: Sql) {
+  const rows = await sql<{ id: number; merchant_email: string }>`
+    select id, merchant_email from shops
+    where is_demo = false and merchant_email is not null and merchant_email <> ''
+  `;
+  if (!rows.length) return;
+  const { readMerchantStatus } = await import("@/lib/merchant.server");
+  for (const row of rows) {
+    try {
+      const snap = await readMerchantStatus(row.merchant_email);
+      await sql`update shops set merchant_status = ${snap.status} where id = ${row.id}`;
+    } catch {
+      /* keep the last known status; a dead service must not publish the shop */
+    }
+  }
+}
+
+async function userIdentity(sql: Sql, userId: string) {
+  const rows = await sql<{ email: string; name: string }>`
+    select email, name from "user" where id = ${userId}
+  `;
+  const email = rows[0]?.email?.trim().toLowerCase() ?? "";
+  const name = text(rows[0]?.name, 60);
+  if (!email) throw new Error("حاول لاحقاً");
+  return { email, name };
+}
+
+async function openClaimedShop(
+  sql: Sql,
+  userId: string,
+  data: {
+    name: string;
+    shopName: string;
+    phone: string;
+    address: string;
+    area: { name: string; lat: number; lng: number };
+    discount: number;
+    inviteCode: string;
+  },
+) {
+  const identity = await userIdentity(sql, userId);
+  const { claimMerchant } = await import("@/lib/merchant.server");
+  await claimMerchant({
+    inviteCode: data.inviteCode,
+    name: data.name.length >= 2 ? data.name : identity.name || data.shopName,
+    businessName: data.shopName,
+    email: identity.email,
+    phone: data.phone,
+  });
+  await sql`
+    insert into shops (
+      owner_user_id, shop_name, area, address, phone, discount_percentage, lat, lng,
+      is_demo, about, merchant_status, merchant_email
+    ) values (
+      ${userId}, ${data.shopName}, ${data.area.name}, ${data.address}, ${data.phone},
+      ${data.discount}, ${data.area.lat}, ${data.area.lng}, false, '', 'pending', ${identity.email}
+    )
+  `;
+  await sql`update profiles set role = 'technician' where user_id = ${userId}`;
 }
 
 function discountOf(v: unknown) {
@@ -177,22 +285,27 @@ export const getProfile = createServerFn({ method: "GET" })
       shop_phone: string | null;
       discount_percentage: number | null;
       shop_about: string | null;
+      merchant_status: string | null;
     }>`
       select p.name, p.phone, p.address, p.area, p.role,
         s.id as shop_id, s.shop_name, s.area as shop_area, s.address as shop_address,
-        s.phone as shop_phone, s.discount_percentage, s.about as shop_about
+        s.phone as shop_phone, s.discount_percentage, s.about as shop_about,
+        s.merchant_status
       from profiles p
       left join shops s on s.owner_user_id = p.user_id
       where p.user_id = ${context.userId}
     `;
     const row = rows[0];
     if (!row) return null;
+    const gate = row.shop_id ? await ownerGate(sql, context.userId) : null;
+    const merchantStatus = gate?.status ?? merchantStatusOf(row.merchant_status);
     return {
       name: row.name,
       phone: row.phone,
       address: row.address,
       area: row.area,
       role: row.role,
+      blocked: gate ? merchantBlocksSession(gate.status) : false,
       shop: row.shop_id
         ? {
             id: num(row.shop_id),
@@ -202,6 +315,8 @@ export const getProfile = createServerFn({ method: "GET" })
             phone: row.shop_phone ?? "",
             discount: num(row.discount_percentage),
             about: row.shop_about ?? "",
+            merchantStatus,
+            dues: gate?.dues ?? null,
           }
         : null,
     };
@@ -220,8 +335,9 @@ export const createProfile = createServerFn({ method: "POST" })
     const area = areaOf(body.area);
     const shopName = text(body.shopName, 60);
     const discount = role === "technician" ? discountOf(body.discount ?? 15) : 15;
+    const inviteCode = role === "technician" ? inviteOf(body.inviteCode) : "";
     if (role === "technician" && shopName.length < 2) throw new Error("اكتب اسم المحل");
-    return { role, name, phone, address, area, shopName, discount };
+    return { role, name, phone, address, area, shopName, discount, inviteCode };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -233,14 +349,12 @@ export const createProfile = createServerFn({ method: "POST" })
       values (${context.userId}, ${data.name}, ${data.phone}, ${data.address}, ${data.area.name}, ${data.role})
     `;
     if (data.role === "technician") {
-      await sql`
-        insert into shops (
-          owner_user_id, shop_name, area, address, phone, discount_percentage, lat, lng, is_demo, about
-        ) values (
-          ${context.userId}, ${data.shopName}, ${data.area.name}, ${data.address}, ${data.phone},
-          ${data.discount}, ${data.area.lat}, ${data.area.lng}, false, ''
-        )
-      `;
+      try {
+        await openClaimedShop(sql, context.userId, data);
+      } catch (err) {
+        await sql`delete from profiles where user_id = ${context.userId}`;
+        throw err;
+      }
     }
     return { ok: true };
   });
@@ -280,15 +394,17 @@ export const saveShop = createServerFn({ method: "POST" })
       address,
       area: areaOf(body.area),
       discount: discountOf(body.discount ?? 15),
+      inviteCode: text(body.inviteCode, 64),
     };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const profile = await sql`select user_id from profiles where user_id = ${context.userId}`;
+    const profile = await sql<{ name: string }>`select name from profiles where user_id = ${context.userId}`;
     if (!profile.length) throw new Error("كمّل بيانات الحساب الأول");
     const owned = await sql<{ id: number }>`select id from shops where owner_user_id = ${context.userId}`;
     if (owned[0]) {
+      assertShopOpen(await ownerGate(sql, context.userId));
       await sql`
         update shops
         set shop_name = ${data.shopName}, area = ${data.area.name}, address = ${data.address},
@@ -296,16 +412,12 @@ export const saveShop = createServerFn({ method: "POST" })
         where owner_user_id = ${context.userId}
       `;
     } else {
-      await sql`
-        insert into shops (
-          owner_user_id, shop_name, area, address, phone, discount_percentage, lat, lng, is_demo, about
-        ) values (
-          ${context.userId}, ${data.shopName}, ${data.area.name}, ${data.address}, ${data.phone},
-          ${data.discount}, ${data.area.lat}, ${data.area.lng}, false, ''
-        )
-      `;
+      await openClaimedShop(sql, context.userId, {
+        ...data,
+        name: profile[0]?.name ?? data.shopName,
+        inviteCode: inviteOf(data.inviteCode),
+      });
     }
-    await sql`update profiles set role = 'technician' where user_id = ${context.userId}`;
     return { ok: true };
   });
 
@@ -314,6 +426,7 @@ export const setDiscount = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    assertShopOpen(await ownerGate(sql, context.userId));
     const rows = await sql`
       update shops set discount_percentage = ${data}
       where owner_user_id = ${context.userId}
@@ -327,6 +440,7 @@ export const getCatalog = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async (): Promise<{ shops: Shop[]; products: Product[] }> => {
     const sql = await getSql();
+    await syncPublicMerchants(sql);
     const shops = await sql<ShopSql>`
       select s.id, s.shop_name, s.area, s.address, s.phone, s.discount_percentage,
         s.lat, s.lng, s.is_demo, s.about,
@@ -335,13 +449,16 @@ export const getCatalog = createServerFn({ method: "GET" })
              else round(avg(r.stars)::numeric, 1)::float8 end as rating
       from shops s
       left join reviews r on r.shop_id = s.id
+      where s.merchant_status = 'active'
       group by s.id
       order by s.id
     `;
     const products = await sql<ProductSql>`
-      select id, shop_id, name, price_egp, discount_price_egp, image_url
-      from products
-      order by id
+      select p.id, p.shop_id, p.name, p.price_egp, p.discount_price_egp, p.image_url
+      from products p
+      join shops s on s.id = p.shop_id
+      where s.merchant_status = 'active'
+      order by p.id
     `;
     return { shops: shops.map(mapShop), products: products.map(mapProduct) };
   });
@@ -355,6 +472,7 @@ export const getShop = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ data: id }): Promise<{ shop: Shop; products: Product[]; reviews: Review[] }> => {
     const sql = await getSql();
+    await syncPublicMerchants(sql);
     const shops = await sql<ShopSql>`
       select s.id, s.shop_name, s.area, s.address, s.phone, s.discount_percentage,
         s.lat, s.lng, s.is_demo, s.about,
@@ -364,6 +482,7 @@ export const getShop = createServerFn({ method: "GET" })
       from shops s
       left join reviews r on r.shop_id = s.id
       where s.id = ${id}
+        and s.merchant_status = 'active'
       group by s.id
     `;
     const shop = shops[0];
@@ -413,12 +532,34 @@ export const createOrder = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
-    const shops = await sql<{ id: number; owner_user_id: string | null; discount_percentage: number }>`
-      select id, owner_user_id, discount_percentage from shops where id = ${data.shopId}
+    const shops = await sql<{
+      id: number;
+      owner_user_id: string | null;
+      discount_percentage: number;
+      is_demo: boolean;
+      merchant_status: string;
+      merchant_email: string | null;
+    }>`
+      select id, owner_user_id, discount_percentage, is_demo, merchant_status, merchant_email
+      from shops where id = ${data.shopId}
     `;
     const shop = shops[0];
     if (!shop) throw new Error("محل غير موجود");
     if (shop.owner_user_id === context.userId) throw new Error("متقدرش تطلب من محلك");
+    let status = merchantStatusOf(shop.merchant_status);
+    if (!shop.is_demo && shop.merchant_email) {
+      try {
+        const { readMerchantStatus } = await import("@/lib/merchant.server");
+        const snap = await readMerchantStatus(shop.merchant_email);
+        status = snap.status;
+        if (status !== shop.merchant_status) {
+          await sql`update shops set merchant_status = ${status} where id = ${shop.id}`;
+        }
+      } catch {
+        status = merchantStatusOf(shop.merchant_status);
+      }
+    }
+    if (status !== "active") throw new Error("المحل مش متاح حالياً");
     let productName: string | null = null;
     let price: number | null = null;
     let productId: number | null = null;
@@ -495,6 +636,9 @@ export const getTechBoard = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<{ orders: OrderView[]; products: Product[] }> => {
     const sql = await getSql();
+    const gate = await ownerGate(sql, context.userId);
+    if (gate && merchantBlocksSession(gate.status)) throw new Error(MERCHANT_BLOCKED);
+    if (!gate || gate.status !== "active") return { orders: [], products: [] };
     const orders = await sql<OrderSql>`
       select o.id, o.shop_id, s.shop_name, s.area, s.is_demo, s.discount_percentage,
         o.kind, o.product_name, o.price_egp, o.problem_description, o.service_type,
@@ -532,6 +676,11 @@ export const getOrder = createServerFn({ method: "GET" })
   .handler(async ({ context, data }): Promise<OrderView> => {
     const loaded = await loadOrder(data, context.userId, true);
     if (!loaded) throw new Error("الطلب غير موجود");
+    if (loaded.order.ownedShop) {
+      const sql = await getSql();
+      const gate = await ownerGate(sql, context.userId);
+      if (gate && merchantBlocksSession(gate.status)) throw new Error(MERCHANT_BLOCKED);
+    }
     return loaded.order;
   });
 
@@ -569,6 +718,7 @@ export const advanceOrder = createServerFn({ method: "POST" })
       const allowed = techMoves(order.service_type, order.status);
       if (!allowed.includes(data.next)) throw new Error("الخطوة دي مش متاحة");
       if (!isOwner && !(isClient && order.is_demo)) throw new Error("استنى المحل يحدّث الحالة");
+      if (isOwner) assertShopOpen(await ownerGate(sql, context.userId));
     }
     const updated = await sql`
       update orders set status = ${data.next}
@@ -622,6 +772,7 @@ export const addProduct = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    assertShopOpen(await ownerGate(sql, context.userId));
     const rows = await sql<{ id: number }>`
       insert into products (shop_id, name, price_egp, discount_price_egp, image_url)
       select s.id, ${data.name}, ${data.price}, ${data.discountPrice}, ${data.image}
@@ -642,6 +793,7 @@ export const deleteProduct = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const sql = await getSql();
+    assertShopOpen(await ownerGate(sql, context.userId));
     const rows = await sql`
       delete from products p
       using shops s

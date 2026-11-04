@@ -18,6 +18,27 @@ export const AREAS = [
 export type ServiceType = "delivery" | "walk_in";
 export type OrderKind = "repair" | "accessory";
 export type Mode = "client" | "tech";
+export type MerchantStatus = "pending" | "active" | "suspended" | "banned" | "rejected";
+
+export const MERCHANT_BLOCKED = "تم إيقاف الحساب";
+
+export function merchantStatusOf(value: unknown): MerchantStatus {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (
+    raw === "pending" ||
+    raw === "active" ||
+    raw === "suspended" ||
+    raw === "banned" ||
+    raw === "rejected"
+  ) {
+    return raw;
+  }
+  return "pending";
+}
+
+export function merchantBlocksSession(status: MerchantStatus) {
+  return status === "banned" || status === "rejected";
+}
 
 export type Shop = {
   id: number;
@@ -57,6 +78,7 @@ export type Profile = {
   address: string;
   area: string;
   role: "client" | "technician";
+  blocked?: boolean;
   shop: null | {
     id: number;
     shopName: string;
@@ -65,6 +87,8 @@ export type Profile = {
     phone: string;
     discount: number;
     about: string;
+    merchantStatus: MerchantStatus;
+    dues: number | null;
   };
 };
 

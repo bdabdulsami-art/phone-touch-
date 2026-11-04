@@ -2,8 +2,9 @@ import { useState, type FormEvent } from "react";
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { authClient, authEnabled } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { errMsg } from "@/lib/domain";
-import { Alert, Boot, Button, Field, HouseMark, TextInput } from "@/components/ui";
+import { createProfile } from "@/lib/api";
+import { AREAS, errMsg } from "@/lib/domain";
+import { Alert, AreaSelect, Boot, Button, Field, HouseMark, TextInput } from "@/components/ui";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
@@ -22,14 +23,36 @@ function authError(message: string) {
 function Login() {
   const { user, isPending } = useCurrentUserState();
   const [emailMode, setEmailMode] = useState<"in" | "up">("up");
+  const [kind, setKind] = useState<"client" | "shop">("client");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [shopName, setShopName] = useState("");
+  const [shopAddress, setShopAddress] = useState("");
+  const [shopPhone, setShopPhone] = useState("");
+  const [shopArea, setShopArea] = useState<string>(AREAS[0].name);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [stay, setStay] = useState(false);
 
   if (isPending) return <Boot />;
-  if (user) return <Navigate to="/" />;
+  if (user && !stay) return <Navigate to="/" />;
+
+  async function claimShop() {
+    await createProfile({
+      data: {
+        role: "technician",
+        name,
+        phone: shopPhone,
+        address: shopAddress,
+        area: shopArea,
+        shopName,
+        discount: 15,
+        inviteCode,
+      },
+    });
+  }
 
   async function onEmail(e: FormEvent) {
     e.preventDefault();
@@ -37,6 +60,11 @@ function Login() {
     setBusy(true);
     setError("");
     try {
+      if (emailMode === "up" && kind === "shop" && stay && user) {
+        await claimShop();
+        window.location.href = "/";
+        return;
+      }
       const result =
         emailMode === "up"
           ? await authClient.signUp.email({ email, password, name, callbackURL: "/" })
@@ -45,6 +73,16 @@ function Login() {
         setError(authError(result.error.message ?? "تعذر الدخول"));
         setBusy(false);
         return;
+      }
+      if (emailMode === "up" && kind === "shop") {
+        try {
+          await claimShop();
+        } catch (err) {
+          setStay(true);
+          setError(errMsg(err));
+          setBusy(false);
+          return;
+        }
       }
       window.location.href = "/";
     } catch (err) {
@@ -71,9 +109,51 @@ function Login() {
             </Button>
           </div>
           {emailMode === "up" ? (
+            <div className="flex gap-2">
+              <Button type="button" variant={kind === "client" ? "primary" : "ghost"} onClick={() => setKind("client")}>
+                عميل
+              </Button>
+              <Button type="button" variant={kind === "shop" ? "primary" : "ghost"} onClick={() => setKind("shop")}>
+                محل
+              </Button>
+            </div>
+          ) : null}
+          {emailMode === "up" ? (
             <Field label="الاسم">
               <TextInput value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required />
             </Field>
+          ) : null}
+          {emailMode === "up" && kind === "shop" ? (
+            <>
+              <Field label="كود الدعوة">
+                <TextInput value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} autoComplete="off" required />
+              </Field>
+              <Field label="اسم المحل">
+                <TextInput value={shopName} onChange={(e) => setShopName(e.target.value)} required />
+              </Field>
+              <Field label="العنوان">
+                <TextInput value={shopAddress} onChange={(e) => setShopAddress(e.target.value)} autoComplete="street-address" required />
+              </Field>
+              <Field label="التليفون">
+                <TextInput
+                  value={shopPhone}
+                  onChange={(e) => setShopPhone(e.target.value)}
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="01xxxxxxxxx"
+                  required
+                />
+              </Field>
+              <Field label="المنطقة">
+                <AreaSelect value={shopArea} onChange={(e) => setShopArea(e.target.value)}>
+                  {AREAS.map((item) => (
+                    <option key={item.id} value={item.name}>
+                      {item.name}
+                    </option>
+                  ))}
+                </AreaSelect>
+              </Field>
+            </>
           ) : null}
           <Field label="الإيميل">
             <TextInput type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
