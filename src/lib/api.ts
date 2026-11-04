@@ -112,7 +112,10 @@ async function userIdentity(sql: Sql, userId: string) {
   `;
   const email = rows[0]?.email?.trim().toLowerCase() ?? "";
   const name = text(rows[0]?.name, 60);
-  if (!email) throw new Error("حاول لاحقاً");
+  if (!email) {
+    console.error("[merchant]", "missing_user_email", JSON.stringify({ userId }));
+    throw new Error("تعذر قراءة إيميل الحساب. حاول لاحقاً");
+  }
   return { email, name };
 }
 
