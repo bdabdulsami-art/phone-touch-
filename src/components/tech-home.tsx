@@ -190,7 +190,10 @@ function OrderList({
               <div className="min-w-0">
                 <p className="font-semibold">{order.kind === "accessory" ? order.productName : "صيانة"}</p>
                 <p className="text-sm text-muted">
-                  {order.clientName} · {order.serviceType === "delivery" ? "دليفري" : "حضور للمحل"}
+                  {order.clientName}
+                  {order.deviceBrand ? ` · ${order.deviceBrand} ${order.deviceModel}` : ""}
+                  {order.clientArea ? ` · ${order.clientArea}` : ""}
+                  {` · ${order.serviceType === "delivery" ? "دليفري" : "حضور للمحل"}`}
                 </p>
                 <p className="mt-1 text-sm">{order.problem}</p>
               </div>

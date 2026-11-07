@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { MapPin, Search } from "lucide-react";
 import { getCatalog } from "@/lib/api";
 import { usePhone } from "@/components/phone";
-import { Discount, Stars } from "@/components/ui";
+import { Discount, ShopPhoto, Stars } from "@/components/ui";
 import {
   AREAS,
   areaByName,
@@ -183,9 +183,7 @@ export function ClientHome() {
                 params={{ shopId: String(shop.id) }}
                 className="flex items-start gap-3 rounded-xl border border-line bg-bg-elev p-4"
               >
-                <span className="grid size-12 shrink-0 place-items-center rounded-md bg-pine text-base font-semibold text-pine-ink">
-                  {shop.shopName.slice(0, 1)}
-                </span>
+                <ShopPhoto src={shop.imageUrl} alt="" />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-start justify-between gap-2">
                     <span className="font-semibold">{shop.shopName}</span>

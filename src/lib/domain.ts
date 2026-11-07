@@ -53,6 +53,7 @@ export type Shop = {
   about: string;
   rating: number | null;
   reviewCount: number;
+  imageUrl: string | null;
 };
 
 export type Product = {
@@ -89,6 +90,7 @@ export type Profile = {
     about: string;
     merchantStatus: MerchantStatus;
     dues: number | null;
+    imageUrl: string | null;
   };
 };
 
@@ -109,7 +111,16 @@ export type OrderView = {
   status: string;
   createdAt: string;
   deviceImage: string | null;
+  deviceBrand: string;
+  deviceModel: string;
   clientName: string;
+  clientArea: string;
+  clientAddress: string | null;
+  clientPhone: string | null;
+  shopAddress: string | null;
+  shopPhone: string | null;
+  shopImageUrl: string | null;
+  shopPublic: boolean;
   ownedShop: boolean;
   review: null | { stars: number; comment: string };
 };
@@ -196,6 +207,24 @@ export function formatWhen(iso: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(d);
+}
+
+export function clientContactOpen(status: string) {
+  return status !== "pending" && status !== "rejected" && status !== "cancelled";
+}
+
+export const SHOP_PLACEHOLDER = "/shop-placeholder.svg";
+
+export function safeShopImage(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return null;
+    if (!parsed.hostname.endsWith(".blob.vercel-storage.com")) return null;
+    return url;
+  } catch {
+    return null;
+  }
 }
 
 export function isSafeImage(src: string) {

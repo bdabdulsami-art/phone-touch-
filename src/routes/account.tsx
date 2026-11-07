@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { UserButton } from "@/lib/auth/gates";
-import { saveShop, updateProfile } from "@/lib/api";
+import { saveShop, updateProfile, uploadShopImage } from "@/lib/api";
 import { Gate, Shell, leaveIfBlocked, usePhone } from "@/components/phone";
-import { Alert, AreaSelect, Button, Field, TextInput } from "@/components/ui";
+import { Alert, AreaSelect, Button, Field, ShopPhoto, TextInput } from "@/components/ui";
 import { AREAS, errMsg, formatMoney } from "@/lib/domain";
+import { compressShopPhoto } from "@/lib/image";
 
 export const Route = createFileRoute("/account")({ component: AccountPage });
 
@@ -137,7 +138,10 @@ function AccountBody() {
             </form>
           </>
         ) : profile.shop.merchantStatus === "pending" ? (
-          <p className="text-sm font-medium">طلبك قيد المراجعة</p>
+          <div className="space-y-3">
+            <p className="text-sm font-medium">طلبك قيد المراجعة</p>
+            <ShopImageForm imageUrl={profile.shop.imageUrl} onSaved={refresh} />
+          </div>
         ) : profile.shop.merchantStatus === "suspended" ? (
           <div className="space-y-1 text-sm">
             <p>المحل موقوف. تقدر تشوف المستحقات فقط.</p>
@@ -148,6 +152,7 @@ function AccountBody() {
         ) : profile.shop.merchantStatus === "active" ? (
           <>
             <p className="text-sm text-muted">تقدر تبدّل بين واجهة العميل وواجهة المحل من أعلى الشاشة.</p>
+            <ShopImageForm imageUrl={profile.shop.imageUrl} onSaved={refresh} />
             <form
               className="space-y-3"
               onSubmit={(e) => {
@@ -201,6 +206,47 @@ function AccountBody() {
       {note ? <p className="text-sm text-pine">{note}</p> : null}
       <Alert>{error}</Alert>
       <UserButton />
+    </div>
+  );
+}
+
+function ShopImageForm({ imageUrl, onSaved }: { imageUrl: string | null; onSaved: () => Promise<unknown> }) {
+  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="space-y-2">
+      <ShopPhoto src={imageUrl} alt="صورة المحل" className="h-36 w-full rounded-lg object-cover" />
+      <label
+        className={`flex h-11 cursor-pointer items-center justify-center rounded-md border border-line text-sm font-medium ${busy ? "opacity-50" : ""}`}
+      >
+        {busy ? "بنرفع الصورة..." : "صورة المحل من الكاميرا أو المعرض"}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          disabled={busy}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            setBusy(true);
+            setError("");
+            setNote("");
+            void compressShopPhoto(file)
+              .then((data) => uploadShopImage({ data: { data } }))
+              .then(() => onSaved())
+              .then(() => setNote("اتحفظت صورة المحل"))
+              .catch(async (err) => {
+                if (await leaveIfBlocked(err)) return;
+                setError(errMsg(err));
+              })
+              .finally(() => setBusy(false));
+          }}
+        />
+      </label>
+      {note ? <p className="text-sm text-pine">{note}</p> : null}
+      <Alert>{error}</Alert>
     </div>
   );
 }

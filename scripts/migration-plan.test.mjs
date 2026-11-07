@@ -60,7 +60,7 @@ test("app migrations live in the globbed directory and the auth source stays put
   const migrationsDir = join(projectRoot(), "migrations");
   assert.deepEqual(
     pendingMigrations(readdirSync(migrationsDir), []).map((m) => m.name),
-    ["0001_auth.sql", "0002_phone_touch.sql", "0003_asyut_kafr.sql"],
+    ["0001_auth.sql", "0002_phone_touch.sql", "0003_asyut_kafr.sql", "0004_merchant_status.sql", "0005_shop_image_order_contact.sql"],
   );
   assert.ok(readdirSync(join(migrationsDir, "auth")).includes("0001_auth.sql"));
 });

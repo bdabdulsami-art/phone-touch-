@@ -3,7 +3,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { getShop } from "@/lib/api";
 import { Gate, Shell } from "@/components/phone";
-import { Discount, Stars } from "@/components/ui";
+import { Discount, PhoneActions, ShopPhoto, Stars } from "@/components/ui";
 import { errMsg, formatMoney, formatWhen, type Product, type Review, type Shop } from "@/lib/domain";
 
 export const Route = createFileRoute("/shop/$shopId")({ component: ShopPage });
@@ -51,17 +51,20 @@ function ShopBody() {
         <ChevronRight className="size-4" />
         المحلات
       </Link>
-      <header className="space-y-2">
+      <header className="space-y-3">
+        <ShopPhoto src={shop.imageUrl} alt={shop.shopName} className="h-44 w-full rounded-xl object-cover" />
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-2xl font-semibold">{shop.shopName}</h1>
           <Discount value={shop.discount} />
         </div>
-        <p className="text-sm text-muted">
-          {shop.area} · {shop.address}
-        </p>
+        <p className="text-sm text-muted">{shop.area}</p>
+        <p className="text-sm">{shop.address}</p>
         <Stars value={shop.rating} count={shop.reviewCount} />
         <p className="text-sm">{shop.about}</p>
-        <p className="text-sm text-muted">تليفون المحل {shop.phone}</p>
+        <p className="text-sm" dir="ltr">
+          {shop.phone}
+        </p>
+        <PhoneActions phone={shop.phone} />
         {shop.isDemo ? (
           <p className="rounded-lg border border-line bg-bg-elev p-3 text-sm text-muted">
             محل تجريبي عشان تجرب الطلب. بعد التأكيد تقدر تحرّك خطوات التتبع بنفسك.

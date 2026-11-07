@@ -6,10 +6,12 @@ import {
   DISCOUNTS,
   MERCHANT_BLOCKED,
   areaByName,
+  clientContactOpen,
   isSafeImage,
   merchantBlocksSession,
   merchantStatusOf,
   num,
+  safeShopImage,
   techMoves,
   type MerchantStatus,
   type OrderKind,
@@ -181,6 +183,7 @@ type ShopSql = {
   about: string;
   review_count: number | string;
   rating: number | string | null;
+  image_url: string | null;
 };
 
 function mapShop(row: ShopSql): Shop {
@@ -198,6 +201,7 @@ function mapShop(row: ShopSql): Shop {
     about: row.about,
     reviewCount,
     rating: reviewCount === 0 || row.rating == null ? null : num(row.rating),
+    imageUrl: safeShopImage(row.image_url),
   };
 }
 
@@ -238,13 +242,31 @@ type OrderSql = {
   status: string;
   created_at: string;
   device_image: string | null;
+  device_brand: string | null;
+  device_model: string | null;
   client_name: string | null;
+  client_phone: string | null;
+  client_address: string | null;
+  client_area: string | null;
+  profile_phone: string | null;
+  profile_address: string | null;
+  profile_area: string | null;
+  shop_address: string | null;
+  shop_phone: string | null;
+  shop_image_url: string | null;
+  merchant_status: string | null;
   owner_user_id: string | null;
   review_stars: number | null;
   review_comment: string | null;
 };
 
 function mapOrder(row: OrderSql, userId: string, withImage: boolean): OrderView {
+  const ownedShop = row.owner_user_id === userId;
+  const shopPublic = Boolean(row.is_demo) || row.merchant_status === "active";
+  const showClient = ownedShop && clientContactOpen(row.status);
+  const showShop = !ownedShop && shopPublic;
+  const clientPhone = (row.client_phone || row.profile_phone || "").trim();
+  const clientAddress = (row.client_address || row.profile_address || "").trim();
   return {
     id: num(row.id),
     shopId: num(row.shop_id),
@@ -262,8 +284,17 @@ function mapOrder(row: OrderSql, userId: string, withImage: boolean): OrderView 
     status: row.status,
     createdAt: row.created_at,
     deviceImage: withImage ? row.device_image : null,
+    deviceBrand: (row.device_brand ?? "").trim(),
+    deviceModel: (row.device_model ?? "").trim(),
     clientName: row.client_name ?? "عميل",
-    ownedShop: row.owner_user_id === userId,
+    clientArea: (row.client_area || row.profile_area || "").trim(),
+    clientAddress: showClient ? clientAddress : null,
+    clientPhone: showClient ? clientPhone : null,
+    shopAddress: showShop ? row.shop_address : null,
+    shopPhone: showShop ? row.shop_phone : null,
+    shopImageUrl: showShop ? safeShopImage(row.shop_image_url) : null,
+    shopPublic: showShop,
+    ownedShop,
     review:
       row.review_stars == null
         ? null
@@ -289,11 +320,12 @@ export const getProfile = createServerFn({ method: "GET" })
       discount_percentage: number | null;
       shop_about: string | null;
       merchant_status: string | null;
+      image_url: string | null;
     }>`
       select p.name, p.phone, p.address, p.area, p.role,
         s.id as shop_id, s.shop_name, s.area as shop_area, s.address as shop_address,
         s.phone as shop_phone, s.discount_percentage, s.about as shop_about,
-        s.merchant_status
+        s.merchant_status, s.image_url
       from profiles p
       left join shops s on s.owner_user_id = p.user_id
       where p.user_id = ${context.userId}
@@ -320,6 +352,7 @@ export const getProfile = createServerFn({ method: "GET" })
             about: row.shop_about ?? "",
             merchantStatus,
             dues: gate?.dues ?? null,
+            imageUrl: safeShopImage(row.image_url),
           }
         : null,
     };
@@ -446,7 +479,7 @@ export const getCatalog = createServerFn({ method: "GET" })
     await syncPublicMerchants(sql);
     const shops = await sql<ShopSql>`
       select s.id, s.shop_name, s.area, s.address, s.phone, s.discount_percentage,
-        s.lat, s.lng, s.is_demo, s.about,
+        s.lat, s.lng, s.is_demo, s.about, s.image_url,
         count(r.id)::int as review_count,
         case when count(r.id) = 0 then null
              else round(avg(r.stars)::numeric, 1)::float8 end as rating
@@ -478,7 +511,7 @@ export const getShop = createServerFn({ method: "GET" })
     await syncPublicMerchants(sql);
     const shops = await sql<ShopSql>`
       select s.id, s.shop_name, s.area, s.address, s.phone, s.discount_percentage,
-        s.lat, s.lng, s.is_demo, s.about,
+        s.lat, s.lng, s.is_demo, s.about, s.image_url,
         count(r.id)::int as review_count,
         case when count(r.id) = 0 then null
              else round(avg(r.stars)::numeric, 1)::float8 end as rating
@@ -527,10 +560,14 @@ export const createOrder = createServerFn({ method: "POST" })
     const kind: OrderKind = body.kind === "accessory" ? "accessory" : "repair";
     const serviceType: ServiceType = body.serviceType === "walk_in" ? "walk_in" : "delivery";
     const problem = text(body.problem, 500);
+    const brand = text(body.brand, 40);
+    const model = text(body.model, 60);
     const productId = body.productId == null ? null : num(body.productId);
     const deviceImage = imageOf(body.deviceImage, kind === "repair");
     if (kind === "repair" && problem.length < 8) throw new Error("اوصف العطل في جملة واضحة");
-    return { shopId, kind, serviceType, problem, productId, deviceImage };
+    if (kind === "repair" && brand.length < 2) throw new Error("اكتب ماركة الجهاز");
+    if (kind === "repair" && model.length < 1) throw new Error("اكتب موديل الجهاز");
+    return { shopId, kind, serviceType, problem, productId, deviceImage, brand, model };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -563,6 +600,11 @@ export const createOrder = createServerFn({ method: "POST" })
       }
     }
     if (status !== "active") throw new Error("المحل مش متاح حالياً");
+    const people = await sql<{ name: string; phone: string; address: string; area: string }>`
+      select name, phone, address, area from profiles where user_id = ${context.userId}
+    `;
+    const person = people[0];
+    if (!person) throw new Error("كمّل بيانات الحساب الأول");
     let productName: string | null = null;
     let price: number | null = null;
     let productId: number | null = null;
@@ -582,10 +624,12 @@ export const createOrder = createServerFn({ method: "POST" })
     const rows = await sql<{ id: number }>`
       insert into orders (
         client_id, shop_id, kind, product_id, product_name, price_egp, device_image,
+        device_brand, device_model, client_phone, client_address, client_area,
         problem_description, service_type, delivery_cost_client, delivery_cost_tech, status
       ) values (
         ${context.userId}, ${data.shopId}, ${data.kind}, ${productId}, ${productName}, ${price},
-        ${data.deviceImage}, ${data.kind === "accessory" && !data.problem ? productName ?? "" : data.problem},
+        ${data.deviceImage}, ${data.brand}, ${data.model}, ${person.phone}, ${person.address}, ${person.area},
+        ${data.kind === "accessory" && !data.problem ? productName ?? "" : data.problem},
         ${data.serviceType}, ${delivery ? DELIVERY_FEE : 0}, ${delivery ? DELIVERY_FEE : 0}, 'pending'
       )
       returning id
@@ -599,8 +643,11 @@ async function loadOrder(orderId: number, userId: string, withImage: boolean) {
     select o.id, o.shop_id, s.shop_name, s.area, s.is_demo, s.discount_percentage,
       o.kind, o.product_name, o.price_egp, o.problem_description, o.service_type,
       o.delivery_cost_client, o.delivery_cost_tech, o.status, o.created_at::text as created_at,
-      o.device_image, p.name as client_name, s.owner_user_id,
-      rv.stars as review_stars, rv.comment as review_comment,
+      o.device_image, o.device_brand, o.device_model,
+      o.client_phone, o.client_address, o.client_area,
+      p.name as client_name, p.phone as profile_phone, p.address as profile_address, p.area as profile_area,
+      s.address as shop_address, s.phone as shop_phone, s.image_url as shop_image_url, s.merchant_status,
+      s.owner_user_id, rv.stars as review_stars, rv.comment as review_comment,
       o.client_id
     from orders o
     join shops s on s.id = o.shop_id
@@ -622,8 +669,11 @@ export const listMyOrders = createServerFn({ method: "GET" })
       select o.id, o.shop_id, s.shop_name, s.area, s.is_demo, s.discount_percentage,
         o.kind, o.product_name, o.price_egp, o.problem_description, o.service_type,
         o.delivery_cost_client, o.delivery_cost_tech, o.status, o.created_at::text as created_at,
-        null::text as device_image, p.name as client_name, s.owner_user_id,
-        rv.stars as review_stars, rv.comment as review_comment
+        null::text as device_image, o.device_brand, o.device_model,
+        o.client_phone, o.client_address, o.client_area,
+        p.name as client_name, p.phone as profile_phone, p.address as profile_address, p.area as profile_area,
+        s.address as shop_address, s.phone as shop_phone, s.image_url as shop_image_url, s.merchant_status,
+        s.owner_user_id, rv.stars as review_stars, rv.comment as review_comment
       from orders o
       join shops s on s.id = o.shop_id
       left join profiles p on p.user_id = o.client_id
@@ -646,8 +696,11 @@ export const getTechBoard = createServerFn({ method: "GET" })
       select o.id, o.shop_id, s.shop_name, s.area, s.is_demo, s.discount_percentage,
         o.kind, o.product_name, o.price_egp, o.problem_description, o.service_type,
         o.delivery_cost_client, o.delivery_cost_tech, o.status, o.created_at::text as created_at,
-        o.device_image, p.name as client_name, s.owner_user_id,
-        rv.stars as review_stars, rv.comment as review_comment
+        o.device_image, o.device_brand, o.device_model,
+        o.client_phone, o.client_address, o.client_area,
+        p.name as client_name, p.phone as profile_phone, p.address as profile_address, p.area as profile_area,
+        s.address as shop_address, s.phone as shop_phone, s.image_url as shop_image_url, s.merchant_status,
+        s.owner_user_id, rv.stars as review_stars, rv.comment as review_comment
       from orders o
       join shops s on s.id = o.shop_id
       left join profiles p on p.user_id = o.client_id
@@ -806,4 +859,75 @@ export const deleteProduct = createServerFn({ method: "POST" })
     if (!rows.length) throw new Error("المنتج مش عندك");
     return { ok: true };
   });
+
+const SHOP_IMAGE_MAX = 5 * 1024 * 1024;
+
+function shopImagePayload(v: unknown) {
+  if (typeof v !== "string") throw new Error("اختار صورة");
+  const data = v.trim().replace(/^data:image\/(?:jpeg|jpg|png|webp);base64,/i, "");
+  if (data.length < 32 || data.length > 7_000_000) throw new Error("الصورة لازم تكون أصغر من ٥ ميجا");
+  return data;
+}
+
+function sniffImage(bytes: Uint8Array): "image/jpeg" | "image/png" | "image/webp" | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+export const uploadShopImage = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = asRecord(input);
+    return { data: shopImagePayload(body.data) };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const gate = await ownerGate(sql, context.userId);
+    if (!gate) throw new Error("افتح المحل الأول");
+    if (merchantBlocksSession(gate.status)) throw new Error(MERCHANT_BLOCKED);
+    if (gate.status === "suspended") throw new Error("المحل موقوف. تقدر تشوف المستحقات فقط.");
+    if (gate.status !== "active" && gate.status !== "pending") throw new Error("المحل مش متاح");
+    const bytes = Buffer.from(data.data, "base64");
+    if (bytes.length < 32 || bytes.length > SHOP_IMAGE_MAX) throw new Error("الصورة لازم تكون أصغر من ٥ ميجا");
+    const mime = sniffImage(bytes);
+    if (!mime) throw new Error("الصور المسموحة JPG أو PNG أو WebP فقط");
+    const { storeShopImage } = await import("@/lib/blob.server");
+    const url = await storeShopImage(bytes, mime, gate.id);
+    const saved = safeShopImage(url);
+    if (!saved) throw new Error("تعذر حفظ الصورة");
+    const rows = await sql`
+      update shops set image_url = ${saved}
+      where id = ${gate.id} and owner_user_id = ${context.userId}
+      returning id
+    `;
+    if (!rows.length) throw new Error("المحل مش عندك");
+    return { imageUrl: saved };
+  });
+
 

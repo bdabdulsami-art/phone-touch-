@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { Star } from "lucide-react";
+import { SHOP_PLACEHOLDER, phoneOk } from "@/lib/domain";
 
 export const fieldClass =
   "h-11 w-full rounded-md border border-line bg-bg-elev px-3 text-base text-ink outline-none placeholder:text-subtle focus-visible:border-pine";
@@ -77,6 +78,30 @@ export function Discount({ value }: { value: number }) {
     <span className="inline-flex h-7 items-center rounded-md bg-pine px-2 text-xs font-medium text-pine-ink">
       خصم {value}%
     </span>
+  );
+}
+
+export function PhoneActions({ phone }: { phone: string }) {
+  const local = phoneOk(phone);
+  if (!local) return null;
+  const wa = `20${local.slice(1)}`;
+  const look =
+    "inline-flex h-11 items-center justify-center rounded-md border border-line bg-bg-elev px-4 text-sm font-medium";
+  return (
+    <div className="flex flex-wrap gap-2">
+      <a href={`tel:${local}`} className={look}>
+        اتصال
+      </a>
+      <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" className={look}>
+        واتساب
+      </a>
+    </div>
+  );
+}
+
+export function ShopPhoto({ src, alt = "", className }: { src: string | null; alt?: string; className?: string }) {
+  return (
+    <img src={src || SHOP_PLACEHOLDER} alt={alt} className={className ?? "size-12 shrink-0 rounded-md object-cover"} />
   );
 }
 

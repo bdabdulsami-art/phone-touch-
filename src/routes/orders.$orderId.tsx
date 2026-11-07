@@ -3,7 +3,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { Check, ChevronRight } from "lucide-react";
 import { addReview, advanceOrder, getOrder } from "@/lib/api";
 import { Gate, Shell, leaveIfBlocked, usePhone } from "@/components/phone";
-import { Alert, Button, Stars, TextArea } from "@/components/ui";
+import { Alert, Button, PhoneActions, ShopPhoto, Stars, TextArea } from "@/components/ui";
 import {
   STATUS_LABEL,
   actionLabel,
@@ -16,6 +16,68 @@ import {
 } from "@/lib/domain";
 
 export const Route = createFileRoute("/orders/$orderId")({ component: TrackPage });
+
+function deviceLabel(order: OrderView) {
+  const label = [order.deviceBrand, order.deviceModel].filter(Boolean).join(" ");
+  return label || "—";
+}
+
+function ShopFacts({ order }: { order: OrderView }) {
+  return (
+    <section className="space-y-2 rounded-xl border border-line bg-bg-elev p-4">
+      <h2 className="font-semibold">المحل</h2>
+      {order.shopPublic ? (
+        <ShopPhoto src={order.shopImageUrl} alt={order.shopName} className="h-40 w-full rounded-lg object-cover" />
+      ) : null}
+      <p className="font-medium">{order.shopName}</p>
+      <p className="text-sm text-muted">{order.area}</p>
+      {order.shopPublic && order.shopAddress ? <p className="text-sm">{order.shopAddress}</p> : null}
+      {order.shopPublic && order.shopPhone ? (
+        <>
+          <p className="text-sm" dir="ltr">
+            {order.shopPhone}
+          </p>
+          <PhoneActions phone={order.shopPhone} />
+        </>
+      ) : null}
+      {!order.shopPublic ? <p className="text-sm text-muted">المحل مش ظاهر للعملاء حالياً.</p> : null}
+      <p className="text-sm text-muted">
+        {order.serviceType === "delivery"
+          ? `دليفري · ${formatMoney(order.deliveryClient)} عليك و${formatMoney(order.deliveryTech)} على المحل`
+          : "استلام من المحل"}
+        {order.price != null ? ` · المنتج ${formatMoney(order.price)}` : ` · خصم الصيانة ${order.discount}%`}
+      </p>
+      {order.kind === "repair" ? <p className="text-sm">العطل: {order.problem}</p> : <p className="text-sm">{order.problem}</p>}
+    </section>
+  );
+}
+
+function ClientFacts({ order }: { order: OrderView }) {
+  return (
+    <section className="space-y-2 rounded-xl border border-line bg-bg-elev p-4">
+      <h2 className="font-semibold">بيانات العميل</h2>
+      <p className="text-sm">الاسم: {order.clientName}</p>
+      <p className="text-sm">المنطقة: {order.clientArea || "—"}</p>
+      <p className="text-sm">الجهاز: {deviceLabel(order)}</p>
+      <p className="text-sm">وصف العطل: {order.problem || "—"}</p>
+      {order.clientPhone ? (
+        <>
+          <p className="text-sm">العنوان: {order.clientAddress || "—"}</p>
+          <p className="text-sm" dir="ltr">
+            {order.clientPhone}
+          </p>
+          <PhoneActions phone={order.clientPhone} />
+        </>
+      ) : (
+        <p className="text-sm text-muted">العنوان والتليفون يظهروا بعد قبول الطلب.</p>
+      )}
+      <p className="text-sm text-muted">
+        {order.serviceType === "delivery" ? "دليفري" : "حضور للمحل"}
+        {order.price != null ? ` · المنتج ${formatMoney(order.price)}` : ` · خصم الصيانة ${order.discount}%`}
+      </p>
+    </section>
+  );
+}
 
 function TrackPage() {
   return (
@@ -98,14 +160,7 @@ function TrackBody() {
       {order.deviceImage ? (
         <img src={order.deviceImage} alt="الجهاز" className="h-52 w-full rounded-xl object-cover" />
       ) : null}
-      <p className="text-sm">{order.problem}</p>
-      <p className="text-sm text-muted">
-        {order.serviceType === "delivery"
-          ? `دليفري · ${formatMoney(order.deliveryClient)} عليك و${formatMoney(order.deliveryTech)} على المحل`
-          : "استلام من المحل"}
-        {order.price != null ? ` · المنتج ${formatMoney(order.price)}` : ` · خصم الصيانة ${order.discount}%`}
-      </p>
-      {order.ownedShop ? <p className="text-sm">العميل: {order.clientName}</p> : null}
+      {order.ownedShop ? <ClientFacts order={order} /> : <ShopFacts order={order} />}
 
       {stopped ? (
         <p className="rounded-xl border border-line bg-danger-soft p-4 text-sm font-medium text-danger">

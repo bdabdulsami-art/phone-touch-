@@ -3,7 +3,7 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Camera, ChevronRight, ShieldAlert, Store, Truck } from "lucide-react";
 import { createOrder, getShop } from "@/lib/api";
 import { Gate, Shell } from "@/components/phone";
-import { Alert, Button, TextArea } from "@/components/ui";
+import { Alert, Button, TextArea, TextInput } from "@/components/ui";
 import { DELIVERY_FEE, errMsg, formatMoney, type Product, type ServiceType, type Shop } from "@/lib/domain";
 import { fileToJpeg } from "@/lib/image";
 
@@ -36,6 +36,8 @@ function OrderBody() {
   const [shop, setShop] = useState<Shop | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [problem, setProblem] = useState("");
+  const [brand, setBrand] = useState("");
+  const [model, setModel] = useState("");
   const [service, setService] = useState<ServiceType>("delivery");
   const [image, setImage] = useState("");
   const [error, setError] = useState("");
@@ -72,6 +74,8 @@ function OrderBody() {
           kind: accessory ? "accessory" : "repair",
           productId: product?.id,
           problem: accessory ? problem || product?.name || "" : problem,
+          brand: accessory ? "" : brand,
+          model: accessory ? "" : model,
           serviceType: service,
           deviceImage: image || undefined,
         },
@@ -125,6 +129,8 @@ function OrderBody() {
             />
           </label>
           {image ? <img src={image} alt="صورة الجهاز" className="h-44 w-full rounded-xl object-cover" /> : null}
+          <TextInput value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="الماركة، مثال: سامسونج" required />
+          <TextInput value={model} onChange={(e) => setModel(e.target.value)} placeholder="الموديل، مثال: A54" required />
           <TextArea
             value={problem}
             onChange={(e) => setProblem(e.target.value)}
