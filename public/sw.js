@@ -1,8 +1,6 @@
-const CACHE = "lamsa-shell-v1";
+const CACHE = "lamsa-shell-v3";
 
 const PRECACHE = [
-  "/",
-  "/login",
   "/offline.html",
   "/favicon.svg",
   "/icons/icon-192.png",
@@ -13,8 +11,6 @@ const PRECACHE = [
   "/pwa/shot-shop.png",
   "/pwa/shot-order.png",
 ];
-
-const SHELL_PATHS = new Set(["/", "/login"]);
 
 function isUserRequest(url, request) {
   if (request.headers.get("x-tsr-serverfn") === "true") return true;
@@ -71,28 +67,17 @@ self.addEventListener("fetch", (event) => {
   if (isUserRequest(url, request)) return;
 
   if (request.mode === "navigate") {
-    const shell = SHELL_PATHS.has(url.pathname);
+    // Home and login (and every other document) depend on the signed-in user.
+    // Never write those responses into the cache.
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (shell && response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
-          }
-          return response;
-        })
-        .catch(async () => {
-          if (shell) {
-            const cached = await caches.match(request);
-            if (cached) return cached;
-          }
-          const offline = await caches.match("/offline.html");
-          if (offline) return offline;
-          return new Response("غير متصل", {
-            status: 503,
-            headers: { "content-type": "text/plain; charset=utf-8" },
-          });
-        }),
+      fetch(request).catch(async () => {
+        const offline = await caches.match("/offline.html");
+        if (offline) return offline;
+        return new Response("غير متصل", {
+          status: 503,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }),
     );
     return;
   }

@@ -250,9 +250,12 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="min-h-dvh">
       <header className="sticky top-0 z-20 border-b border-line bg-bg">
         <div className="mx-auto flex h-16 max-w-xl items-center justify-between gap-3 px-4">
-          <Link to="/" className="leading-none">
-            <span className="block text-lg font-semibold tracking-tight">لمسة</span>
-            <span className="block text-xs text-muted">Phone Touch</span>
+          <Link to="/" className="flex items-center gap-2 leading-none">
+            <img src="/icons/icon-192.png" alt="" className="size-10 rounded-lg" />
+            <span>
+              <span className="block text-lg font-semibold tracking-tight">لمسة</span>
+              <span className="block text-xs text-muted">Phone Touch</span>
+            </span>
           </Link>
           {profile.shop ? (
             <div className="flex rounded-md border border-line bg-bg-elev p-1">

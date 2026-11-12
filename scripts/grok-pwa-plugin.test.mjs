@@ -520,7 +520,7 @@ test("escapes host-derived values in the install page", () => {
 
 test("renders the Phone Touch manifest for packaging", () => {
   const manifest = JSON.parse(renderWebManifest("phone-touch.vercel.app"));
-  assert.equal(manifest.name, "لمسة - Phone Touch");
+  assert.equal(manifest.name, "لمسة — Phone Touch");
   assert.equal(manifest.short_name, "لمسة");
   assert.equal(manifest.lang, "ar");
   assert.equal(manifest.dir, "rtl");
@@ -529,7 +529,7 @@ test("renders the Phone Touch manifest for packaging", () => {
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.id, "/");
   assert.equal(manifest.theme_color, "#1F4D3A");
-  assert.equal(manifest.background_color, "#F3F1EB");
+  assert.equal(manifest.background_color, "#F1EFE9");
   assert.match(manifest.description, /صيانة الموبايل/);
   assert.match(manifest.description, /أقرب محل/);
   assert.match(manifest.description, /خصم واضح/);

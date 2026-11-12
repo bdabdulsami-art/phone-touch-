@@ -127,13 +127,11 @@ export function HouseMark() {
 
 export function Boot() {
   return (
-    <main className="grid min-h-dvh place-items-center px-6">
+    <main className="grid min-h-dvh place-items-center bg-[#1F4D3A] px-6 text-[#F1EFE9]">
       <div className="text-center">
-        <p className="text-2xl font-semibold tracking-tight">لمسة</p>
-        <p className="mt-1 text-sm text-muted">Phone Touch</p>
-        <div className="mx-auto mt-4 h-0.5 w-16 overflow-hidden rounded-full bg-line">
-          <div className="h-full w-1/2 animate-pulse bg-pine" />
-        </div>
+        <img src="/icons/icon-512.png" alt="" className="mx-auto size-24 rounded-2xl" />
+        <p className="mt-4 text-2xl font-semibold tracking-tight">لمسة</p>
+        <p className="mt-1 text-sm text-[#F1EFE9]/80">Phone Touch</p>
       </div>
     </main>
   );

@@ -18,8 +18,13 @@ export const Route = createRootRoute({
         content: "صيانة الموبايل من أقرب محل، بخصم واضح وتتبع للطلب.",
       },
       { name: "theme-color", content: "#1F4D3A" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "لمسة" },
     ],
     links: [
+      { rel: "icon", type: "image/png", sizes: "192x192", href: "/icons/icon-192.png" },
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
