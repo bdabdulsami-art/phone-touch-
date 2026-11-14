@@ -164,13 +164,12 @@ export function renderWebManifest(_hostHeader) {
       short_name: "لمسة",
       description:
         "صيانة الموبايل من غير ما تلف: أقرب محل، خصم واضح على الإصلاح، وتتبع للطلب لحد ما جهازك يرجع.",
+      lang: "ar",
+      dir: "rtl",
       id: "/",
       start_url: "/",
       scope: "/",
-      lang: "ar",
-      dir: "rtl",
       display: "standalone",
-      orientation: "portrait",
       background_color: "#F1EFE9",
       theme_color: "#1F4D3A",
       icons: [
@@ -199,9 +198,15 @@ export function grokPwaHeadTags(_appName = DEFAULT_APP_NAME) {
     ["manifest", '<link rel="manifest" href="/__grok/manifest.webmanifest">'],
     ["apple-touch-icon", '<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">'],
     ["icon", '<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">'],
-    ["apple-mobile-web-app-capable", '<meta name="apple-mobile-web-app-capable" content="yes">'],
+    [
+      "apple-mobile-web-app-title",
+      '<meta name="apple-mobile-web-app-title" content="لمسة">',
+    ],
+    [
+      "apple-mobile-web-app-capable",
+      '<meta name="apple-mobile-web-app-capable" content="yes">',
+    ],
     ["mobile-web-app-capable", '<meta name="mobile-web-app-capable" content="yes">'],
-    ["apple-mobile-web-app-title", '<meta name="apple-mobile-web-app-title" content="لمسة">'],
     [
       "apple-mobile-web-app-status-bar-style",
       '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
