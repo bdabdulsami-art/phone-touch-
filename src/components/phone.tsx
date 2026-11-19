@@ -251,7 +251,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-line bg-bg">
         <div className="mx-auto flex h-16 max-w-xl items-center justify-between gap-3 px-4">
           <Link to="/" className="flex items-center gap-2 leading-none">
-            <img src="/icons/icon-192.png" alt="" className="size-10 rounded-lg" />
+            <img src="/icons/icon-512.png" alt="" className="size-10 rounded-lg" />
             <span>
               <span className="block text-lg font-semibold tracking-tight">لمسة</span>
               <span className="block text-xs text-muted">Phone Touch</span>

@@ -24,8 +24,8 @@ export const Route = createRootRoute({
       { name: "apple-mobile-web-app-title", content: "لمسة" },
     ],
     links: [
+      { rel: "icon", type: "image/png", sizes: "64x64", href: "/icons/favicon-64.png" },
       { rel: "icon", type: "image/png", sizes: "192x192", href: "/icons/icon-192.png" },
-      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },

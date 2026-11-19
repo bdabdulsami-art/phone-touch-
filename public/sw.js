@@ -1,11 +1,11 @@
-const CACHE = "lamsa-shell-v3";
+const CACHE = "lamsa-shell-v4";
 
 const PRECACHE = [
   "/offline.html",
-  "/favicon.svg",
+  "/icons/favicon-64.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
-  "/icons/icon-512-maskable.png",
+  "/icons/icon-maskable-512.png",
   "/icons/apple-touch-icon.png",
   "/pwa/shot-home.png",
   "/pwa/shot-shop.png",
@@ -26,7 +26,7 @@ function isStaticAsset(path) {
     path.startsWith("/icons/") ||
     path.startsWith("/pwa/") ||
     path === "/offline.html" ||
-    path === "/favicon.svg"
+    path === "/icons/favicon-64.png"
   );
 }
 
