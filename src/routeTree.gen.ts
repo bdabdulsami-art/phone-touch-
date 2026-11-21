@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
+import { Route as InstallRouteImport } from './routes/install'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OrderNewRouteImport } from './routes/order.new'
 import { Route as OrdersIndexRouteImport } from './routes/orders.index'
@@ -26,6 +27,11 @@ const IndexRoute = IndexRouteImport.update({
 const AccountRoute = AccountRouteImport.update({
   id: '/account',
   path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InstallRoute = InstallRouteImport.update({
+  id: '/install',
+  path: '/install',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -62,6 +68,7 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/install': typeof InstallRoute
   '/login': typeof LoginRoute
   '/order/new': typeof OrderNewRoute
   '/orders/$orderId': typeof OrdersOrderIdRoute
@@ -72,6 +79,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/install': typeof InstallRoute
   '/login': typeof LoginRoute
   '/order/new': typeof OrderNewRoute
   '/orders/$orderId': typeof OrdersOrderIdRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/install': typeof InstallRoute
   '/login': typeof LoginRoute
   '/order/new': typeof OrderNewRoute
   '/orders/$orderId': typeof OrdersOrderIdRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/account'
+    | '/install'
     | '/login'
     | '/order/new'
     | '/orders/$orderId'
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/account'
+    | '/install'
     | '/login'
     | '/order/new'
     | '/orders/$orderId'
@@ -115,6 +126,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/account'
+    | '/install'
     | '/login'
     | '/order/new'
     | '/orders/$orderId'
@@ -126,6 +138,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
+  InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRoute
   OrderNewRoute: typeof OrderNewRoute
   OrdersOrderIdRoute: typeof OrdersOrderIdRoute
@@ -148,6 +161,13 @@ declare module '@tanstack/react-router' {
       path: '/account'
       fullPath: '/account'
       preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/install': {
+      id: '/install'
+      path: '/install'
+      fullPath: '/install'
+      preLoaderRoute: typeof InstallRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -198,6 +218,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
+  InstallRoute: InstallRoute,
   LoginRoute: LoginRoute,
   OrderNewRoute: OrderNewRoute,
   OrdersOrderIdRoute: OrdersOrderIdRoute,
