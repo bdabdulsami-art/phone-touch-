@@ -1,4 +1,5 @@
-const INSTALLED_KEY = "pt-installed";
+const INSTALLED_KEY = "lamsa_installed";
+const LEGACY_KEY = "pt-installed";
 const DISMISS_KEY = "pt-install-banner";
 
 export function isStandaloneDisplay() {
@@ -7,13 +8,22 @@ export function isStandaloneDisplay() {
   return window.matchMedia("(display-mode: standalone)").matches || nav.standalone === true;
 }
 
-export function appWasInstalled() {
+export function installedFlag() {
   if (typeof window === "undefined") return false;
-  return isStandaloneDisplay() || localStorage.getItem(INSTALLED_KEY) === "1";
+  return localStorage.getItem(INSTALLED_KEY) === "1" || localStorage.getItem(LEGACY_KEY) === "1";
+}
+
+export function appWasInstalled() {
+  return isStandaloneDisplay() || installedFlag();
 }
 
 export function markInstalled() {
   localStorage.setItem(INSTALLED_KEY, "1");
+}
+
+export function clearInstalled() {
+  localStorage.removeItem(INSTALLED_KEY);
+  localStorage.removeItem(LEGACY_KEY);
 }
 
 export function installBannerDismissed() {

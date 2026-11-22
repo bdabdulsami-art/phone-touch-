@@ -530,6 +530,11 @@ test("renders the Phone Touch manifest for packaging", () => {
   assert.equal(manifest.id, "/");
   assert.equal(manifest.theme_color, "#1F4D3A");
   assert.equal(manifest.background_color, "#F1EFE9");
+  assert.equal(manifest.prefer_related_applications, false);
+  assert.deepEqual(manifest.related_applications, [
+    { platform: "webapp", url: "https://phone-touch.vercel.app/manifest.webmanifest" },
+    { platform: "webapp", url: "https://phone-touch.vercel.app/__grok/manifest.webmanifest" },
+  ]);
   assert.match(manifest.description, /صيانة الموبايل/);
   assert.match(manifest.description, /أقرب محل/);
   assert.match(manifest.description, /خصم واضح/);

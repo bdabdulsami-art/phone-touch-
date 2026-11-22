@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import QRCode from "qrcode";
 import { HouseMark } from "@/components/ui";
-import { isStandaloneDisplay, markInstalled } from "@/lib/pwa-install";
+import { clearInstalled, installedFlag, isStandaloneDisplay, markInstalled } from "@/lib/pwa-install";
 
 const SHARE_BLURB = "ثبّت لمسة على موبايلك: أقرب محل صيانة، خصم واضح، وتتبع للطلب لحد ما الجهاز يرجع.";
 
@@ -10,8 +10,6 @@ type InstallPrompt = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
-
-type Phase = "ready" | "installing" | "installed";
 
 export const Route = createFileRoute("/install")({
   head: () => ({
@@ -24,68 +22,78 @@ export const Route = createFileRoute("/install")({
 });
 
 function InstallPage() {
-  const [phase, setPhase] = useState<Phase>("ready");
+  const [installed, setInstalled] = useState(false);
   const [promptEvent, setPromptEvent] = useState<InstallPrompt | null>(null);
+  const [ready, setReady] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [retry, setRetry] = useState(false);
   const [url, setUrl] = useState("https://phone-touch.vercel.app/install");
-  const waitRef = useRef(0);
+  const promptSeen = useRef(false);
 
   useEffect(() => {
-    const pageUrl = `${window.location.origin}/install`;
-    setUrl(pageUrl);
+    setUrl(`${window.location.origin}/install`);
     let cancel = false;
 
-    if (isStandaloneDisplay()) setPhase("installed");
+    if (isStandaloneDisplay()) markInstalled();
+    if (installedFlag()) setInstalled(true);
+
+    const onPrompt = (event: Event) => {
+      event.preventDefault();
+      promptSeen.current = true;
+      clearInstalled();
+      setInstalled(false);
+      setPending(false);
+      setRetry(false);
+      setPromptEvent(event as InstallPrompt);
+      setReady(true);
+    };
+    const onInstalled = () => {
+      markInstalled();
+      setPromptEvent(null);
+      setPending(false);
+      setRetry(false);
+      setInstalled(true);
+      setReady(true);
+    };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+
+    const timer = window.setTimeout(() => setReady(true), 1000);
 
     const nav = navigator as Navigator & {
       getInstalledRelatedApps?: () => Promise<unknown[]>;
     };
-    if (nav.getInstalledRelatedApps) {
+    if (typeof nav.getInstalledRelatedApps === "function") {
       nav
         .getInstalledRelatedApps()
         .then((apps) => {
-          if (cancel || !Array.isArray(apps) || apps.length === 0) return;
-          markInstalled();
-          setPhase("installed");
+          if (cancel || promptSeen.current) return;
+          if (Array.isArray(apps) && apps.length > 0) setInstalled(true);
         })
         .catch(() => {});
     }
 
-    const onPrompt = (event: Event) => {
-      event.preventDefault();
-      setPromptEvent(event as InstallPrompt);
-    };
-    const onInstalled = () => {
-      window.clearTimeout(waitRef.current);
-      markInstalled();
-      setPromptEvent(null);
-      setPhase("installed");
-    };
-    window.addEventListener("beforeinstallprompt", onPrompt);
-    window.addEventListener("appinstalled", onInstalled);
     return () => {
       cancel = true;
-      window.clearTimeout(waitRef.current);
+      window.clearTimeout(timer);
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
     };
   }, []);
 
   async function install() {
-    if (phase !== "ready") return;
-    if (!promptEvent) {
-      document.getElementById("ios-steps")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
+    if (!promptEvent) return;
+    try {
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      setPromptEvent(null);
+      if (choice.outcome === "accepted") setPending(true);
+    } catch {
+      setPromptEvent(null);
     }
-    await promptEvent.prompt();
-    const choice = await promptEvent.userChoice;
-    setPromptEvent(null);
-    if (choice.outcome !== "accepted") return;
-    setPhase((current) => (current === "installed" ? current : "installing"));
-    waitRef.current = window.setTimeout(() => {
-      setPhase("installed");
-    }, 10_000);
   }
 
+  const knownInstalled = installed && !promptEvent;
   const whatsapp = `https://wa.me/?text=${encodeURIComponent(`${SHARE_BLURB}\n${url}`)}`;
 
   return (
@@ -100,21 +108,35 @@ function InstallPage() {
           </div>
         </header>
 
-        {phase === "installed" ? (
-          <div className="space-y-2 rounded-md bg-pine px-4 py-4 text-center text-pine-ink">
-            <p className="text-base font-medium">تم التثبيت ✓</p>
-            <p className="text-sm">افتح لمسة من شاشتك الرئيسية</p>
-            <p className="text-xs text-pine-ink/80">أو من قائمة Chrome ⋮ ثم «فتح في التطبيق» لو ظهرت</p>
+        {knownInstalled ? (
+          <div className="space-y-3">
+            <div className="space-y-2 rounded-md bg-pine px-4 py-4 text-center text-pine-ink">
+              <p className="text-base font-medium">✓ لمسة مثبّت على جهازك</p>
+              <p className="text-sm">افتحه من أيقونة لمسة على الشاشة الرئيسية</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRetry(true)}
+              className="mx-auto block text-sm text-muted underline"
+            >
+              مش لاقيه؟ ثبّته تاني
+            </button>
+            {retry ? <InstallSteps /> : null}
           </div>
-        ) : (
+        ) : promptEvent ? (
           <button
             type="button"
-            disabled={phase === "installing"}
             onClick={() => void install()}
-            className="inline-flex h-14 w-full items-center justify-center rounded-md bg-pine text-base font-medium text-pine-ink disabled:opacity-80"
+            className="inline-flex h-14 w-full items-center justify-center rounded-md bg-pine text-base font-medium text-pine-ink"
           >
-            {phase === "installing" ? "جارٍ التثبيت... ثواني" : "ثبّت التطبيق"}
+            ثبّت التطبيق
           </button>
+        ) : pending ? (
+          <p className="text-center text-sm text-muted">جارٍ التثبيت... ثواني</p>
+        ) : ready ? (
+          <InstallSteps />
+        ) : (
+          <div className="h-14" />
         )}
 
         <Link
@@ -124,14 +146,10 @@ function InstallPage() {
           افتح الموقع في المتصفح
         </Link>
 
-        <section id="ios-steps" className="space-y-3 rounded-lg border border-line bg-bg-elev p-4">
-          <h2 className="text-base font-semibold">على الآيفون</h2>
-          <ol className="space-y-2 text-sm leading-6 text-ink">
-            <li>1. افتح الصفحة في Safari.</li>
-            <li>2. اضغط زر المشاركة.</li>
-            <li>3. اختار «إضافة إلى الشاشة الرئيسية».</li>
-          </ol>
-        </section>
+        <p className="text-xs leading-5 text-muted">
+          لو فتحت لمسة من رابط وفتح في المتصفح: إعدادات الموبايل ← التطبيقات ← لمسة ← الفتح حسب الإعداد
+          الافتراضي ← فتح الروابط المدعومة
+        </p>
 
         <section className="space-y-3 rounded-lg border border-line bg-bg-elev p-4 text-center">
           <h2 className="text-base font-semibold">رابط التثبيت</h2>
@@ -147,6 +165,28 @@ function InstallPage() {
           </a>
         </section>
       </main>
+    </div>
+  );
+}
+
+function InstallSteps() {
+  return (
+    <div className="space-y-3">
+      <section className="space-y-3 rounded-lg border border-line bg-bg-elev p-4">
+        <h2 className="text-base font-semibold">على أندرويد</h2>
+        <ol className="space-y-2 text-sm leading-6 text-ink">
+          <li>1. من Chrome اضغط ⋮</li>
+          <li>2. اختار «تثبيت التطبيق».</li>
+        </ol>
+      </section>
+      <section className="space-y-3 rounded-lg border border-line bg-bg-elev p-4">
+        <h2 className="text-base font-semibold">على الآيفون</h2>
+        <ol className="space-y-2 text-sm leading-6 text-ink">
+          <li>1. افتح الصفحة في Safari.</li>
+          <li>2. اضغط زر المشاركة.</li>
+          <li>3. اختار «إضافة إلى الشاشة الرئيسية».</li>
+        </ol>
+      </section>
     </div>
   );
 }

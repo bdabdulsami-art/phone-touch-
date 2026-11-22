@@ -173,6 +173,17 @@ export function renderWebManifest(_hostHeader) {
       orientation: "portrait",
       background_color: "#F1EFE9",
       theme_color: "#1F4D3A",
+      prefer_related_applications: false,
+      related_applications: [
+        {
+          platform: "webapp",
+          url: "https://phone-touch.vercel.app/manifest.webmanifest",
+        },
+        {
+          platform: "webapp",
+          url: "https://phone-touch.vercel.app/__grok/manifest.webmanifest",
+        },
+      ],
       icons: [
         { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
         { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
