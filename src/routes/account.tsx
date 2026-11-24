@@ -4,7 +4,7 @@ import { UserButton } from "@/lib/auth/gates";
 import { saveShop, updateProfile, uploadShopImage } from "@/lib/api";
 import { Gate, Shell, leaveIfBlocked, usePhone } from "@/components/phone";
 import { Alert, AreaSelect, Button, Field, ShopPhoto, TextInput } from "@/components/ui";
-import { AREAS, errMsg, formatMoney } from "@/lib/domain";
+import { areaChoices, errMsg, formatMoney } from "@/lib/domain";
 import { compressShopPhoto } from "@/lib/image";
 
 export const Route = createFileRoute("/account")({ component: AccountPage });
@@ -62,7 +62,7 @@ function AccountBody() {
         </Field>
         <Field label="المنطقة">
           <AreaSelect value={area} onChange={(e) => setArea(e.target.value)}>
-            {AREAS.map((item) => (
+            {areaChoices(area).map((item) => (
               <option key={item.id} value={item.name}>
                 {item.name}
               </option>
@@ -122,7 +122,7 @@ function AccountBody() {
               </Field>
               <Field label="منطقة المحل">
                 <AreaSelect value={shopArea} onChange={(e) => setShopArea(e.target.value)}>
-                  {AREAS.map((item) => (
+                  {areaChoices(shopArea).map((item) => (
                     <option key={item.id} value={item.name}>
                       {item.name}
                     </option>
@@ -186,7 +186,7 @@ function AccountBody() {
               </Field>
               <Field label="منطقة المحل">
                 <AreaSelect value={shopArea} onChange={(e) => setShopArea(e.target.value)}>
-                  {AREAS.map((item) => (
+                  {areaChoices(shopArea).map((item) => (
                     <option key={item.id} value={item.name}>
                       {item.name}
                     </option>

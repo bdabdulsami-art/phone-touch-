@@ -43,10 +43,12 @@ function phoneOf(v: unknown) {
   return n;
 }
 
-function areaOf(v: unknown) {
-  const area = areaByName(text(v, 40));
-  if (!area) throw new Error("اختار منطقة من القائمة");
-  return area;
+function areaOf(v: unknown, allowSaved = false) {
+  const name = text(v, 40);
+  const area = areaByName(name);
+  if (area) return { ...area, known: true };
+  if (allowSaved && name.length >= 2) return { name, lat: 0, lng: 0, known: false };
+  throw new Error("اختار منطقة من القائمة");
 }
 
 function inviteOf(v: unknown) {
@@ -402,7 +404,7 @@ export const updateProfile = createServerFn({ method: "POST" })
     if (name.length < 2) throw new Error("اكتب الاسم");
     const address = text(body.address, 160);
     if (address.length < 6) throw new Error("اكتب العنوان بالتفصيل");
-    return { name, phone: phoneOf(body.phone), address, area: areaOf(body.area) };
+    return { name, phone: phoneOf(body.phone), address, area: areaOf(body.area, true) };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -428,7 +430,7 @@ export const saveShop = createServerFn({ method: "POST" })
       shopName,
       phone: phoneOf(body.phone),
       address,
-      area: areaOf(body.area),
+      area: areaOf(body.area, true),
       discount: discountOf(body.discount ?? 15),
       inviteCode: text(body.inviteCode, 64),
     };
@@ -444,10 +446,13 @@ export const saveShop = createServerFn({ method: "POST" })
       await sql`
         update shops
         set shop_name = ${data.shopName}, area = ${data.area.name}, address = ${data.address},
-            phone = ${data.phone}, lat = ${data.area.lat}, lng = ${data.area.lng}
+            phone = ${data.phone},
+            lat = case when ${data.area.known} then ${data.area.lat} else lat end,
+            lng = case when ${data.area.known} then ${data.area.lng} else lng end
         where owner_user_id = ${context.userId}
       `;
     } else {
+      if (!data.area.known) throw new Error("اختار منطقة من القائمة");
       await openClaimedShop(sql, context.userId, {
         ...data,
         name: profile[0]?.name ?? data.shopName,

@@ -21,7 +21,7 @@ export function ClientHome() {
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
-  const [area, setArea] = useState("all");
+  const [area, setArea] = useState(AREAS[0].name);
   const [minRating, setMinRating] = useState(0);
   const [sort, setSort] = useState<"near" | "rating">("near");
   const [origin, setOrigin] = useState<{ lat: number; lng: number } | null>(null);
@@ -56,7 +56,7 @@ export function ClientHome() {
 
   const list = useMemo(() => {
     return (shops ?? [])
-      .filter((s) => (area === "all" ? true : s.area === area))
+      .filter((s) => s.area === area || s.shopName.trim() === "شاشه" || s.shopName.trim() === "شاشة")
       .filter((s) => (minRating ? (s.rating ?? 0) >= minRating : true))
       .filter((s) => (q.trim() ? s.shopName.includes(q.trim()) : true))
       .map((s) => ({ ...s, km: kmBetween(base.lat, base.lng, s.lat, s.lng) }))
@@ -125,9 +125,6 @@ export function ClientHome() {
       {geoNote ? <p className="text-sm text-muted">{geoNote}</p> : null}
 
       <div className="scroller -mx-4 flex gap-2 overflow-x-auto px-4">
-        <FilterChip active={area === "all"} onClick={() => setArea("all")}>
-          كل المناطق
-        </FilterChip>
         {AREAS.map((item) => (
           <FilterChip key={item.id} active={area === item.name} onClick={() => setArea(item.name)}>
             {item.name}
@@ -174,7 +171,10 @@ export function ClientHome() {
             <div className="h-24 animate-pulse rounded-xl bg-line" />
           </div>
         ) : null}
-        {shops && list.length === 0 ? <p className="text-sm text-muted">مفيش محلات بالمواصفات دي.</p> : null}
+        {shops && shops.length === 0 ? <p className="text-sm text-muted">لا توجد محلات بعد</p> : null}
+        {shops && shops.length > 0 && list.length === 0 ? (
+          <p className="text-sm text-muted">مفيش محلات بالمواصفات دي.</p>
+        ) : null}
         <ul className="space-y-3">
           {list.map((shop) => (
             <li key={shop.id}>

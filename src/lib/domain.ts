@@ -3,16 +3,7 @@ export const DELIVERY_FEE = 20;
 export const DISCOUNTS = [10, 15, 20, 25] as const;
 
 export const AREAS = [
-  { id: "nasr", name: "مدينة نصر", lat: 30.0626, lng: 31.3301 },
-  { id: "heliopolis", name: "مصر الجديدة", lat: 30.0911, lng: 31.3225 },
-  { id: "maadi", name: "المعادي", lat: 29.9603, lng: 31.2569 },
-  { id: "tagamoa", name: "التجمع الخامس", lat: 30.0074, lng: 31.4913 },
-  { id: "dokki", name: "الدقي", lat: 30.0385, lng: 31.212 },
-  { id: "mohandessin", name: "المهندسين", lat: 30.0505, lng: 31.2001 },
-  { id: "zayed", name: "الشيخ زايد", lat: 30.0305, lng: 30.9765 },
-  { id: "october", name: "٦ أكتوبر", lat: 29.972, lng: 30.942 },
   { id: "asyut", name: "أسيوط", lat: 27.1809, lng: 31.1837 },
-  { id: "kafr", name: "كفر الشيخ", lat: 31.1107, lng: 30.9388 },
 ] as const;
 
 export type ServiceType = "delivery" | "walk_in";
@@ -170,6 +161,13 @@ export function actionLabel(service: ServiceType, next: string): string {
 
 export function areaByName(name: string) {
   return AREAS.find((a) => a.name === name) ?? null;
+}
+
+export function areaChoices(current?: string) {
+  if (current && !AREAS.some((item) => item.name === current)) {
+    return [{ id: "saved", name: current, lat: 0, lng: 0 }, ...AREAS];
+  }
+  return [...AREAS];
 }
 
 export function num(v: unknown): number {

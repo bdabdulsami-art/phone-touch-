@@ -16,6 +16,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
+import { del, list } from "@vercel/blob";
 import { pendingMigrations } from "./migration-plan.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -44,6 +45,9 @@ async function main() {
 
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
   const client = await pool.connect();
+  client.on("notice", (notice) => {
+    if (notice?.message) console.log(`[migrate] ${notice.message}`);
+  });
   try {
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
@@ -74,6 +78,7 @@ async function main() {
       count += 1;
     }
     console.log(count ? `[migrate] done — ${count} migration(s) applied.` : "[migrate] up to date.");
+    await purgeOrphanBlobs(client);
   } finally {
     client.release();
     await pool.end();
@@ -88,3 +93,38 @@ main().catch((err) => {
   }
   process.exit(1);
 });
+
+async function purgeOrphanBlobs(client) {
+  const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+  if (!token) {
+    console.log("[blob] no token — skipping orphan purge");
+    return;
+  }
+  const table = await client.query("select to_regclass('public._cleanup_blobs') as name");
+  if (table.rows[0]?.name) {
+    const queued = await client.query("select url from _cleanup_blobs");
+    const urls = queued.rows.map((row) => row.url).filter((url) => typeof url === "string" && url);
+    if (urls.length) {
+      await del(urls, { token });
+      await client.query("delete from _cleanup_blobs where url = any($1::text[])", [urls]);
+      console.log(`[blob] deleted ${urls.length} queued image(s)`);
+    }
+  }
+  const shops = await client.query("select id::text as id from shops");
+  const ids = new Set(shops.rows.map((row) => row.id));
+  const orphans = [];
+  let cursor;
+  do {
+    const page = await list({ token, prefix: "shops/", limit: 1000, cursor });
+    for (const blob of page.blobs) {
+      const id = blob.pathname.split("/")[1];
+      if (id && !ids.has(id)) orphans.push(blob.url);
+    }
+    cursor = page.hasMore ? page.cursor : undefined;
+  } while (cursor);
+  if (orphans.length) {
+    await del(orphans, { token });
+    console.log(`[blob] deleted ${orphans.length} orphan shop image(s)`);
+  }
+}
+
