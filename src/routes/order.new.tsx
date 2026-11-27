@@ -4,7 +4,9 @@ import { Camera, ChevronRight, ShieldAlert, Store, Truck } from "lucide-react";
 import { createOrder, getShop } from "@/lib/api";
 import { Gate, Shell } from "@/components/phone";
 import { Alert, Button, TextArea, TextInput } from "@/components/ui";
+import { PinMap } from "@/components/pin-map";
 import { DELIVERY_FEE, errMsg, formatMoney, type Product, type ServiceType, type Shop } from "@/lib/domain";
+import { ASYUT, readGps } from "@/lib/geo";
 import { fileToJpeg } from "@/lib/image";
 
 export const Route = createFileRoute("/order/new")({
@@ -40,6 +42,9 @@ function OrderBody() {
   const [model, setModel] = useState("");
   const [service, setService] = useState<ServiceType>("delivery");
   const [image, setImage] = useState("");
+  const [share, setShare] = useState(false);
+  const [pos, setPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoNote, setGeoNote] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -78,6 +83,9 @@ function OrderBody() {
           model: accessory ? "" : model,
           serviceType: service,
           deviceImage: image || undefined,
+          shareLocation: share,
+          clientLat: share ? pos?.lat : undefined,
+          clientLng: share ? pos?.lng : undefined,
         },
       });
       void navigate({ to: "/orders/$orderId", params: { orderId: String(created.id) } });
@@ -171,8 +179,35 @@ function OrderBody() {
         <p className="mt-1">{delivery ? `توصيل ${formatMoney(DELIVERY_FEE)}` : "من غير توصيل"}</p>
         {accessory ? <p className="mt-2 font-semibold tabular-nums">المطلوب الآن {formatMoney(totalKnown)}</p> : null}
       </div>
+      <label className="flex items-start gap-3 rounded-xl border border-line bg-bg-elev p-4 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1 size-4"
+          checked={share}
+          onChange={(e) => {
+            const next = e.target.checked;
+            setShare(next);
+            setGeoNote("");
+            if (!next) {
+              setPos(null);
+              return;
+            }
+            void readGps()
+              .then((point) => setPos(point))
+              .catch(() => {
+                setPos(ASYUT);
+                setGeoNote("الإذن اترفض. حرّك الدبوس لتحديد مكانك.");
+              });
+          }}
+        />
+        <span>
+          شارك موقعي مع المحل. قبل القبول يشوف المنطقة فقط، وبعد القبول يظهر مكانك على الخريطة. المكان يتحذف بعد ٢٤ ساعة من انتهاء الطلب.
+        </span>
+      </label>
+      {share && pos ? <PinMap lat={pos.lat} lng={pos.lng} draggable onChange={(lat, lng) => setPos({ lat, lng })} /> : null}
+      {geoNote ? <p className="text-sm text-muted">{geoNote}</p> : null}
       <Alert>{error}</Alert>
-      <Button type="submit" className="w-full" disabled={busy || (!accessory && !image)}>
+      <Button type="submit" className="w-full" disabled={busy || (!accessory && !image) || (share && !pos)}>
         {busy ? "بنبعت الطلب..." : "تأكيد الطلب"}
       </Button>
     </form>

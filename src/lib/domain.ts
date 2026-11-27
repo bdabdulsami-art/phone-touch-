@@ -40,6 +40,7 @@ export type Shop = {
   discount: number;
   lat: number;
   lng: number;
+  located: boolean;
   isDemo: boolean;
   about: string;
   rating: number | null;
@@ -82,6 +83,9 @@ export type Profile = {
     merchantStatus: MerchantStatus;
     dues: number | null;
     imageUrl: string | null;
+    lat: number;
+    lng: number;
+    locationSet: boolean;
   };
 };
 
@@ -108,6 +112,8 @@ export type OrderView = {
   clientArea: string;
   clientAddress: string | null;
   clientPhone: string | null;
+  clientLat: number | null;
+  clientLng: number | null;
   shopAddress: string | null;
   shopPhone: string | null;
   shopImageUrl: string | null;

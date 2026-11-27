@@ -163,6 +163,25 @@ function discountOf(v: unknown) {
   return n;
 }
 
+function coordOf(v: unknown, kind: "lat" | "lng") {
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) throw new Error("حدد الموقع على الخريطة");
+  if (kind === "lat" && (n < -90 || n > 90)) throw new Error("الموقع غير صالح");
+  if (kind === "lng" && (n < -180 || n > 180)) throw new Error("الموقع غير صالح");
+  return n;
+}
+
+async function purgeExpiredClientPins(sql: Sql) {
+  await sql`
+    update orders
+    set client_lat = null, client_lng = null
+    where status in ('completed', 'cancelled', 'rejected')
+      and closed_at is not null
+      and closed_at < now() - interval '24 hours'
+      and (client_lat is not null or client_lng is not null)
+  `;
+}
+
 function imageOf(v: unknown, required: boolean) {
   if (typeof v !== "string" || !v) {
     if (required) throw new Error("صورة الجهاز مطلوبة");
@@ -181,6 +200,7 @@ type ShopSql = {
   discount_percentage: number | string;
   lat: number | string;
   lng: number | string;
+  location_set: boolean;
   is_demo: boolean;
   about: string;
   review_count: number | string;
@@ -190,6 +210,7 @@ type ShopSql = {
 
 function mapShop(row: ShopSql): Shop {
   const reviewCount = num(row.review_count);
+  const located = Boolean(row.location_set);
   return {
     id: num(row.id),
     shopName: row.shop_name,
@@ -197,8 +218,9 @@ function mapShop(row: ShopSql): Shop {
     address: row.address,
     phone: row.phone,
     discount: num(row.discount_percentage),
-    lat: num(row.lat),
-    lng: num(row.lng),
+    lat: located ? num(row.lat) : 0,
+    lng: located ? num(row.lng) : 0,
+    located,
     isDemo: Boolean(row.is_demo),
     about: row.about,
     reviewCount,
@@ -250,6 +272,8 @@ type OrderSql = {
   client_phone: string | null;
   client_address: string | null;
   client_area: string | null;
+  client_lat: number | string | null;
+  client_lng: number | string | null;
   profile_phone: string | null;
   profile_address: string | null;
   profile_area: string | null;
@@ -292,6 +316,8 @@ function mapOrder(row: OrderSql, userId: string, withImage: boolean): OrderView 
     clientArea: (row.client_area || row.profile_area || "").trim(),
     clientAddress: showClient ? clientAddress : null,
     clientPhone: showClient ? clientPhone : null,
+    clientLat: showClient && row.client_lat != null && row.client_lng != null ? num(row.client_lat) : null,
+    clientLng: showClient && row.client_lat != null && row.client_lng != null ? num(row.client_lng) : null,
     shopAddress: showShop ? row.shop_address : null,
     shopPhone: showShop ? row.shop_phone : null,
     shopImageUrl: showShop ? safeShopImage(row.shop_image_url) : null,
@@ -323,11 +349,14 @@ export const getProfile = createServerFn({ method: "GET" })
       shop_about: string | null;
       merchant_status: string | null;
       image_url: string | null;
+      shop_lat: number | null;
+      shop_lng: number | null;
+      location_set: boolean | null;
     }>`
       select p.name, p.phone, p.address, p.area, p.role,
         s.id as shop_id, s.shop_name, s.area as shop_area, s.address as shop_address,
         s.phone as shop_phone, s.discount_percentage, s.about as shop_about,
-        s.merchant_status, s.image_url
+        s.merchant_status, s.image_url, s.lat as shop_lat, s.lng as shop_lng, s.location_set
       from profiles p
       left join shops s on s.owner_user_id = p.user_id
       where p.user_id = ${context.userId}
@@ -355,6 +384,9 @@ export const getProfile = createServerFn({ method: "GET" })
             merchantStatus,
             dues: gate?.dues ?? null,
             imageUrl: safeShopImage(row.image_url),
+            lat: num(row.shop_lat),
+            lng: num(row.shop_lng),
+            locationSet: Boolean(row.location_set),
           }
         : null,
     };
@@ -446,9 +478,7 @@ export const saveShop = createServerFn({ method: "POST" })
       await sql`
         update shops
         set shop_name = ${data.shopName}, area = ${data.area.name}, address = ${data.address},
-            phone = ${data.phone},
-            lat = case when ${data.area.known} then ${data.area.lat} else lat end,
-            lng = case when ${data.area.known} then ${data.area.lng} else lng end
+            phone = ${data.phone}
         where owner_user_id = ${context.userId}
       `;
     } else {
@@ -459,6 +489,27 @@ export const saveShop = createServerFn({ method: "POST" })
         inviteCode: inviteOf(data.inviteCode),
       });
     }
+    return { ok: true };
+  });
+
+export const saveShopLocation = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = asRecord(input);
+    return { lat: coordOf(body.lat, "lat"), lng: coordOf(body.lng, "lng") };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const gate = await ownerGate(sql, context.userId);
+    if (!gate) throw new Error("افتح المحل الأول");
+    if (merchantBlocksSession(gate.status)) throw new Error(MERCHANT_BLOCKED);
+    const rows = await sql`
+      update shops
+      set lat = ${data.lat}, lng = ${data.lng}, location_set = true
+      where owner_user_id = ${context.userId}
+      returning id
+    `;
+    if (!rows.length) throw new Error("افتح المحل الأول");
     return { ok: true };
   });
 
@@ -484,7 +535,7 @@ export const getCatalog = createServerFn({ method: "GET" })
     await syncPublicMerchants(sql);
     const shops = await sql<ShopSql>`
       select s.id, s.shop_name, s.area, s.address, s.phone, s.discount_percentage,
-        s.lat, s.lng, s.is_demo, s.about, s.image_url,
+        s.lat, s.lng, s.location_set, s.is_demo, s.about, s.image_url,
         count(r.id)::int as review_count,
         case when count(r.id) = 0 then null
              else round(avg(r.stars)::numeric, 1)::float8 end as rating
@@ -516,7 +567,7 @@ export const getShop = createServerFn({ method: "GET" })
     await syncPublicMerchants(sql);
     const shops = await sql<ShopSql>`
       select s.id, s.shop_name, s.area, s.address, s.phone, s.discount_percentage,
-        s.lat, s.lng, s.is_demo, s.about, s.image_url,
+        s.lat, s.lng, s.location_set, s.is_demo, s.about, s.image_url,
         count(r.id)::int as review_count,
         case when count(r.id) = 0 then null
              else round(avg(r.stars)::numeric, 1)::float8 end as rating
@@ -569,10 +620,13 @@ export const createOrder = createServerFn({ method: "POST" })
     const model = text(body.model, 60);
     const productId = body.productId == null ? null : num(body.productId);
     const deviceImage = imageOf(body.deviceImage, kind === "repair");
+    const share = body.shareLocation === true;
+    const clientLat = share ? coordOf(body.clientLat, "lat") : null;
+    const clientLng = share ? coordOf(body.clientLng, "lng") : null;
     if (kind === "repair" && problem.length < 8) throw new Error("اوصف العطل في جملة واضحة");
     if (kind === "repair" && brand.length < 2) throw new Error("اكتب ماركة الجهاز");
     if (kind === "repair" && model.length < 1) throw new Error("اكتب موديل الجهاز");
-    return { shopId, kind, serviceType, problem, productId, deviceImage, brand, model };
+    return { shopId, kind, serviceType, problem, productId, deviceImage, brand, model, clientLat, clientLng };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -629,11 +683,12 @@ export const createOrder = createServerFn({ method: "POST" })
     const rows = await sql<{ id: number }>`
       insert into orders (
         client_id, shop_id, kind, product_id, product_name, price_egp, device_image,
-        device_brand, device_model, client_phone, client_address, client_area,
+        device_brand, device_model, client_phone, client_address, client_area, client_lat, client_lng,
         problem_description, service_type, delivery_cost_client, delivery_cost_tech, status
       ) values (
         ${context.userId}, ${data.shopId}, ${data.kind}, ${productId}, ${productName}, ${price},
         ${data.deviceImage}, ${data.brand}, ${data.model}, ${person.phone}, ${person.address}, ${person.area},
+        ${data.clientLat}, ${data.clientLng},
         ${data.kind === "accessory" && !data.problem ? productName ?? "" : data.problem},
         ${data.serviceType}, ${delivery ? DELIVERY_FEE : 0}, ${delivery ? DELIVERY_FEE : 0}, 'pending'
       )
@@ -644,12 +699,13 @@ export const createOrder = createServerFn({ method: "POST" })
 
 async function loadOrder(orderId: number, userId: string, withImage: boolean) {
   const sql = await getSql();
+  await purgeExpiredClientPins(sql);
   const rows = await sql<OrderSql>`
     select o.id, o.shop_id, s.shop_name, s.area, s.is_demo, s.discount_percentage,
       o.kind, o.product_name, o.price_egp, o.problem_description, o.service_type,
       o.delivery_cost_client, o.delivery_cost_tech, o.status, o.created_at::text as created_at,
       o.device_image, o.device_brand, o.device_model,
-      o.client_phone, o.client_address, o.client_area,
+      o.client_phone, o.client_address, o.client_area, o.client_lat, o.client_lng,
       p.name as client_name, p.phone as profile_phone, p.address as profile_address, p.area as profile_area,
       s.address as shop_address, s.phone as shop_phone, s.image_url as shop_image_url, s.merchant_status,
       s.owner_user_id, rv.stars as review_stars, rv.comment as review_comment,
@@ -670,12 +726,13 @@ export const listMyOrders = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }): Promise<OrderView[]> => {
     const sql = await getSql();
+    await purgeExpiredClientPins(sql);
     const rows = await sql<OrderSql>`
       select o.id, o.shop_id, s.shop_name, s.area, s.is_demo, s.discount_percentage,
         o.kind, o.product_name, o.price_egp, o.problem_description, o.service_type,
         o.delivery_cost_client, o.delivery_cost_tech, o.status, o.created_at::text as created_at,
         null::text as device_image, o.device_brand, o.device_model,
-        o.client_phone, o.client_address, o.client_area,
+        o.client_phone, o.client_address, o.client_area, o.client_lat, o.client_lng,
         p.name as client_name, p.phone as profile_phone, p.address as profile_address, p.area as profile_area,
         s.address as shop_address, s.phone as shop_phone, s.image_url as shop_image_url, s.merchant_status,
         s.owner_user_id, rv.stars as review_stars, rv.comment as review_comment
@@ -697,12 +754,13 @@ export const getTechBoard = createServerFn({ method: "GET" })
     const gate = await ownerGate(sql, context.userId);
     if (gate && merchantBlocksSession(gate.status)) throw new Error(MERCHANT_BLOCKED);
     if (!gate || gate.status !== "active") return { orders: [], products: [] };
+    await purgeExpiredClientPins(sql);
     const orders = await sql<OrderSql>`
       select o.id, o.shop_id, s.shop_name, s.area, s.is_demo, s.discount_percentage,
         o.kind, o.product_name, o.price_egp, o.problem_description, o.service_type,
         o.delivery_cost_client, o.delivery_cost_tech, o.status, o.created_at::text as created_at,
         o.device_image, o.device_brand, o.device_model,
-        o.client_phone, o.client_address, o.client_area,
+        o.client_phone, o.client_address, o.client_area, o.client_lat, o.client_lng,
         p.name as client_name, p.phone as profile_phone, p.address as profile_address, p.area as profile_area,
         s.address as shop_address, s.phone as shop_phone, s.image_url as shop_image_url, s.merchant_status,
         s.owner_user_id, rv.stars as review_stars, rv.comment as review_comment
@@ -782,7 +840,13 @@ export const advanceOrder = createServerFn({ method: "POST" })
       if (isOwner) assertShopOpen(await ownerGate(sql, context.userId));
     }
     const updated = await sql`
-      update orders set status = ${data.next}
+      update orders
+      set status = ${data.next},
+          closed_at = case
+            when ${data.next} = 'completed' or ${data.next} = 'cancelled' or ${data.next} = 'rejected'
+              then coalesce(closed_at, now())
+            else closed_at
+          end
       where id = ${data.orderId} and status = ${order.status}
       returning id
     `;

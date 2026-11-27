@@ -1,4 +1,4 @@
-const CACHE = "lamsa-shell-v4";
+const CACHE = "lamsa-shell-v5";
 
 const PRECACHE = [
   "/offline.html",
@@ -64,6 +64,7 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith("/orders") || url.pathname.startsWith("/order/")) return;
   if (isUserRequest(url, request)) return;
 
   if (request.mode === "navigate") {

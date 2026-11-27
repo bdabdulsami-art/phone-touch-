@@ -4,6 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { getShop } from "@/lib/api";
 import { Gate, Shell } from "@/components/phone";
 import { Discount, PhoneActions, ShopPhoto, Stars } from "@/components/ui";
+import { DirectionsLink, PinMap } from "@/components/pin-map";
 import { errMsg, formatMoney, formatWhen, type Product, type Review, type Shop } from "@/lib/domain";
 
 export const Route = createFileRoute("/shop/$shopId")({ component: ShopPage });
@@ -59,6 +60,14 @@ function ShopBody() {
         </div>
         <p className="text-sm text-muted">{shop.area}</p>
         <p className="text-sm">{shop.address}</p>
+        {shop.located ? (
+          <div className="space-y-2">
+            <PinMap lat={shop.lat} lng={shop.lng} />
+            <DirectionsLink lat={shop.lat} lng={shop.lng} />
+          </div>
+        ) : (
+          <p className="text-sm text-muted">المحل لسه محدّدش موقعه على الخريطة.</p>
+        )}
         <Stars value={shop.rating} count={shop.reviewCount} />
         <p className="text-sm">{shop.about}</p>
         <p className="text-sm" dir="ltr">

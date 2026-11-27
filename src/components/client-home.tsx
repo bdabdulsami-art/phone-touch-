@@ -2,11 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { MapPin, Search } from "lucide-react";
 import { getCatalog } from "@/lib/api";
-import { usePhone } from "@/components/phone";
 import { Discount, ShopPhoto, Stars } from "@/components/ui";
 import {
   AREAS,
-  areaByName,
   errMsg,
   formatKm,
   formatMoney,
@@ -16,7 +14,6 @@ import {
 } from "@/lib/domain";
 
 export function ClientHome() {
-  const { profile } = usePhone();
   const [shops, setShops] = useState<Shop[] | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState("");
@@ -43,8 +40,6 @@ export function ClientHome() {
     };
   }, []);
 
-  const base = origin ?? areaByName(profile.area) ?? AREAS[0];
-
   const deals = useMemo(() => {
     const names = new Map((shops ?? []).map((s) => [s.id, s.shopName]));
     return products
@@ -59,9 +54,18 @@ export function ClientHome() {
       .filter((s) => s.area === area || s.shopName.trim() === "شاشه" || s.shopName.trim() === "شاشة")
       .filter((s) => (minRating ? (s.rating ?? 0) >= minRating : true))
       .filter((s) => (q.trim() ? s.shopName.includes(q.trim()) : true))
-      .map((s) => ({ ...s, km: kmBetween(base.lat, base.lng, s.lat, s.lng) }))
-      .sort((a, b) => (sort === "near" ? a.km - b.km : (b.rating ?? 0) - (a.rating ?? 0) || a.km - b.km));
-  }, [shops, area, minRating, q, sort, base.lat, base.lng]);
+      .map((s) => ({
+        ...s,
+        km: origin && s.located ? kmBetween(origin.lat, origin.lng, s.lat, s.lng) : null,
+      }))
+      .sort((a, b) => {
+        if (sort === "rating") return (b.rating ?? 0) - (a.rating ?? 0) || a.id - b.id;
+        if (a.km == null && b.km == null) return a.id - b.id;
+        if (a.km == null) return 1;
+        if (b.km == null) return -1;
+        return a.km - b.km;
+      });
+  }, [shops, area, minRating, q, sort, origin]);
 
   function locate() {
     if (!navigator.geolocation) {
@@ -71,9 +75,9 @@ export function ClientHome() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setOrigin({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setGeoNote("الترتيب حسب موقعك دلوقتي");
+        setGeoNote("الترتيب والمسافة حسب موقعك دلوقتي");
       },
-      () => setGeoNote("مقدرناش نقرأ الموقع. الترتيب حسب منطقتك."),
+      () => setGeoNote("مقدرناش نقرأ الموقع، والمسافة مخفية."),
       { enableHighAccuracy: false, timeout: 8000 },
     );
   }
@@ -190,7 +194,7 @@ export function ClientHome() {
                     <Discount value={shop.discount} />
                   </span>
                   <span className="mt-1 block text-sm text-muted">
-                    {shop.area} · {formatKm(shop.km)}
+                    {shop.km == null ? shop.area : `${shop.area} · ${formatKm(shop.km)}`}
                   </span>
                   <span className="mt-2 block">
                     <Stars value={shop.rating} count={shop.reviewCount} />

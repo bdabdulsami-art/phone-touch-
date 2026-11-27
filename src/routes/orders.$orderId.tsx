@@ -4,6 +4,7 @@ import { Check, ChevronRight } from "lucide-react";
 import { addReview, advanceOrder, getOrder } from "@/lib/api";
 import { Gate, Shell, leaveIfBlocked, usePhone } from "@/components/phone";
 import { Alert, Button, PhoneActions, ShopPhoto, Stars, TextArea } from "@/components/ui";
+import { DirectionsLink, PinMap } from "@/components/pin-map";
 import {
   STATUS_LABEL,
   actionLabel,
@@ -70,6 +71,16 @@ function ClientFacts({ order }: { order: OrderView }) {
         </>
       ) : (
         <p className="text-sm text-muted">العنوان والتليفون يظهروا بعد قبول الطلب.</p>
+      )}
+      {order.clientLat != null && order.clientLng != null ? (
+        <div className="space-y-2">
+          <PinMap lat={order.clientLat} lng={order.clientLng} />
+          <DirectionsLink lat={order.clientLat} lng={order.clientLng} />
+        </div>
+      ) : (
+        <p className="text-sm text-muted">
+          {order.clientPhone ? "العميل ما شاركش موقعه." : "الموقع الدقيق يظهر بعد قبول الطلب، لو العميل شاركه."}
+        </p>
       )}
       <p className="text-sm text-muted">
         {order.serviceType === "delivery" ? "دليفري" : "حضور للمحل"}

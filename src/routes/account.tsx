@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { UserButton } from "@/lib/auth/gates";
-import { saveShop, updateProfile, uploadShopImage } from "@/lib/api";
+import { saveShop, saveShopLocation, updateProfile, uploadShopImage } from "@/lib/api";
 import { Gate, Shell, leaveIfBlocked, usePhone } from "@/components/phone";
+import { PinMap } from "@/components/pin-map";
 import { Alert, AreaSelect, Button, Field, ShopPhoto, TextInput } from "@/components/ui";
 import { areaChoices, errMsg, formatMoney } from "@/lib/domain";
+import { ASYUT, readGps } from "@/lib/geo";
 import { compressShopPhoto } from "@/lib/image";
 
 export const Route = createFileRoute("/account")({ component: AccountPage });
@@ -141,6 +143,12 @@ function AccountBody() {
           <div className="space-y-3">
             <p className="text-sm font-medium">طلبك قيد المراجعة</p>
             <ShopImageForm imageUrl={profile.shop.imageUrl} onSaved={refresh} />
+            <ShopPinForm
+              lat={profile.shop.lat}
+              lng={profile.shop.lng}
+              located={profile.shop.locationSet}
+              onSaved={refresh}
+            />
           </div>
         ) : profile.shop.merchantStatus === "suspended" ? (
           <div className="space-y-1 text-sm">
@@ -153,6 +161,12 @@ function AccountBody() {
           <>
             <p className="text-sm text-muted">تقدر تبدّل بين واجهة العميل وواجهة المحل من أعلى الشاشة.</p>
             <ShopImageForm imageUrl={profile.shop.imageUrl} onSaved={refresh} />
+            <ShopPinForm
+              lat={profile.shop.lat}
+              lng={profile.shop.lng}
+              located={profile.shop.locationSet}
+              onSaved={refresh}
+            />
             <form
               className="space-y-3"
               onSubmit={(e) => {
@@ -206,6 +220,60 @@ function AccountBody() {
       {note ? <p className="text-sm text-pine">{note}</p> : null}
       <Alert>{error}</Alert>
       <UserButton />
+    </div>
+  );
+}
+
+function ShopPinForm({
+  lat,
+  lng,
+  located,
+  onSaved,
+}: {
+  lat: number;
+  lng: number;
+  located: boolean;
+  onSaved: () => Promise<unknown>;
+}) {
+  const [pos, setPos] = useState(located ? { lat, lng } : ASYUT);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">موقع المحل</p>
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={() => {
+          setError("");
+          void readGps()
+            .then(setPos)
+            .catch((err) => setError(errMsg(err)));
+        }}
+      >
+        حدد موقعي
+      </Button>
+      <PinMap lat={pos.lat} lng={pos.lng} draggable onChange={(nextLat, nextLng) => setPos({ lat: nextLat, lng: nextLng })} />
+      <Button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setError("");
+          setNote("");
+          void saveShopLocation({ data: pos })
+            .then(() => onSaved())
+            .then(() => setNote("اتحفظ الموقع"))
+            .catch((err) => setError(errMsg(err)))
+            .finally(() => setBusy(false));
+        }}
+      >
+        حفظ الموقع
+      </Button>
+      {note ? <p className="text-sm text-pine">{note}</p> : null}
+      <Alert>{error}</Alert>
     </div>
   );
 }
